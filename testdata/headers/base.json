@@ -1,0 +1,4 @@
+{
+  "Authorization": "Bearer file-token",
+  "X-From-File": "yes"
+}

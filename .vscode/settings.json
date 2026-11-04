@@ -1,0 +1,33 @@
+{
+  "cucumberautocomplete.steps": [
+    "src/stepdefs/**/*.steps.ts",
+    "e2e-smoke/features/step_definitions/**/*.js"
+  ],
+  // stepsInvariants: true — safe now that no step pattern uses a numbered backreference
+  // (see request.steps.ts/headers.steps.ts/validation.steps.ts's own doc comments on the
+  // (?:'(...)'|"(...)") quote-verbatim convention, adopted specifically so this setting
+  // can't break anything). stepsInvariants splits a *simple* alternation like
+  // (replaced|merged) or (AUT|[name]) into one step variant per branch — it only matches
+  // parenthesised groups with no further parens nested inside, so it leaves the
+  // quote-verbatim construct (which nests a capturing group in each branch) untouched.
+  // Confirmed directly against the extension's own source (steps.handler.js) and by
+  // instantiating it against our real step files: completion still matches correctly
+  // end-to-end with this on, just as more (more concrete) autocomplete suggestions per
+  // step pattern — one per target/body-kind combination, rather than one entry showing the
+  // alternation syntax in the label.
+  "cucumberautocomplete.stepsInvariants": true,
+  "cucumberautocomplete.smartSnippets": true,
+  // Default keyword list includes every Cucumber i18n locale plus bare single-letter
+  // tokens like "A" (Welsh "and") and "Step"/"Data" (other-locale Given/When synonyms) —
+  // any of those appearing as an ordinary word anywhere in a *.steps.ts file (a log
+  // message, a comment's @example, a string literal) gets misread as a step-definition
+  // keyword, with whatever quoted text follows it on that line captured as a bogus step.
+  "cucumberautocomplete.gherkinDefinitionPart": "(Given|When|Then)",
+  "[feature]": {
+    "editor.quickSuggestions": {
+      "other": true,
+      "comments": false,
+      "strings": true
+    }
+  }
+}

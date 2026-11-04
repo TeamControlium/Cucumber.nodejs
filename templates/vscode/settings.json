@@ -1,0 +1,26 @@
+{
+  // Verified 2026-09-30 against @controlium/cucumber-driver's own stepdefs — the second
+  // glob entry is what makes this package's step library (wireAllStepDefinitions and its
+  // per-category functions) show up in autocomplete and "go to definition". Adjust the
+  // first entry if this suite's own step definitions live somewhere other than e2e/steps/.
+  "cucumberautocomplete.steps": [
+    "**/e2e/steps/**/*.steps.ts",
+    "node_modules/@controlium/cucumber-driver/dist/esm/stepdefs/**/*.js"
+  ],
+  // smartSnippets turns capture-group parts like \[(.*)\] into fillable tab-stops instead
+  // of literal regex text in the inserted snippet — confirmed against the extension's own
+  // source to only touch display/insert text, never the matching RegExp itself, so it's
+  // safe to enable unconditionally.
+  //
+  // stepsInvariants deliberately NOT enabled, even though it would show an alternation like
+  // (replaced|merged) as two separate, clean suggestions instead of the raw regex syntax —
+  // confirmed against the extension's own source that it rebuilds the actual matching RegExp
+  // per variant, which removes the alternation's own capturing group and shifts every later
+  // group number down by one. Any step whose regex combines an alternation with a later
+  // backreference (\N) — several of this package's own header-configuration steps do, for
+  // the quote-verbatim rule — has that backreference's numbering silently broken as a
+  // result: the step stops matching real step text, even though the regex, run directly,
+  // matches it fine. Do not enable this without first checking none of the active step
+  // definitions mix an alternation with a later backreference.
+  "cucumberautocomplete.smartSnippets": true
+}

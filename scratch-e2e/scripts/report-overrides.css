@@ -1,0 +1,235 @@
+/* Works around two bugs in multiple-cucumber-html-reporter@4.5.0's "inline" attachment
+ * layout (templates/includes/scenario_card.liquid), both scoped to the "+ Show Info" text
+ * box (id="sa-<scenario>-<step>-text") used for Controlium's log attachments:
+ *
+ * - That box ships as `white-space: pre-wrap` with no `overflow-x-auto`, so long log lines
+ *   wrap to the container width instead of scrolling. The sibling JSON box right next to it
+ *   in the same template already carries `overflow-x-auto` — this just brings the text box
+ *   in line with the vendor's own convention.
+ * - A leading blank line + indentation artefact (a separate template whitespace-control bug)
+ *   is fixed in report-overrides.js instead — not something CSS alone can remove, since it's
+ *   literal whitespace baked into the rendered HTML, not a styling choice.
+ *
+ * font-size: 12px is the explicit "logging lines" size — these boxes default to text-[11px]
+ * from the template, close enough that it'd otherwise be easy to mistake for already done.
+ */
+div[id$="-text"] {
+  white-space: pre;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+/* "All grey text everywhere" -> black. Every bit of grey text in this report, including
+ * opacity variants like `text-muted-foreground/50`, resolves through exactly one CSS
+ * variable — confirmed in the compiled stylesheet: `.text-muted-foreground,
+ * .text-muted-foreground\/50 { color: var(--muted-foreground) }`, with the /NN variants
+ * color-mixing against that same variable rather than a separate one. No raw Tailwind
+ * grey-palette classes (text-gray-*, text-slate-*, etc.) are used anywhere in the real
+ * templates — confirmed via grep. Overriding the one variable — in both light (:root) and
+ * dark mode's own override block, since the report has a light/dark toggle — recolors
+ * every instance everywhere at once, rather than needing to touch dozens of individual
+ * class usages across every template.
+ */
+:root,
+.dark {
+  --muted-foreground: black;
+}
+
+/* The vendor's layout.liquid/header.liquid/footer.liquid all wrap their content in
+ * `mx-auto max-w-7xl` (Tailwind's 1280px cap), centering everything with large empty
+ * margins on a wide viewport. No `generate()` option controls this — it's not a deliberate
+ * reading-width choice we're overriding so much as a fixed default with no escape hatch.
+ * Dropping the cap here lets the page use the full browser width; <main>'s own `px-6`
+ * padding still keeps a consistent gutter either way. */
+.max-w-7xl {
+  max-width: none;
+}
+
+/* DataTable rendering (table.border-collapse — confirmed the only <table> in the real
+ * report pages carrying that class; the Features-overview table and the separate
+ * email-report.html table both use different class sets) ships as `w-full` with no per-
+ * column widths, so a short-content table (e.g. a 2-row "JSON-Path | Value" DataTable)
+ * stretches every column to split the page width evenly instead of sizing to its content.
+ * That's now more visible than ever after the full-width override above.
+ *
+ * report-overrides.js freezes each column's natural auto-layout width into an explicit
+ * inline px width on its <th> and switches the table to table-layout: fixed. Resizing
+ * itself is NOT native CSS `resize` (tried first — confirmed live, repeatedly, that
+ * Chromium's own table-layout engine reconciles a resized cell against the table's overall
+ * width in surprising, undocumented ways: growing one column could shrink its neighbour,
+ * and dragging past another column's min-width floor would damp the rate to a fraction
+ * instead of just stopping). report-overrides.js drives its own mousedown/mousemove drag
+ * instead — touches only the one <th> being dragged, nothing else, ever.
+ *
+ * .col-resize-handle is a real element report-overrides.js injects into each <th> (not a
+ * native resize corner) — `position: relative` on the <th> is what anchors it; the
+ * highlight only appears on hover/active so the handle stays invisible until needed.
+ */
+table.border-collapse th {
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+table.border-collapse td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+table.border-collapse .col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  user-select: none;
+}
+table.border-collapse .col-resize-handle:hover,
+table.border-collapse .col-resize-handle.is-resizing {
+  background: currentColor;
+  opacity: 0.25;
+}
+
+/* v4's dashboard (index.liquid) and feature-detail page (feature.liquid) both ship a row
+ * of ApexCharts analytics panels — status donuts, device/browser/tag breakdowns, slowest-
+ * scenario/step charts — that v3.6.2 never had. Every one of them is unconditionally
+ * rendered in the Liquid source (confirmed: zero `{% if %}` around any of them) — there is
+ * no `generate()` option that removes them, so this is the only way to get back to
+ * something close to 3.6.2's leaner layout without forking the template.
+ *
+ * Each selector anchors to one chart's own container <div id="..."> (stable, vendor-owned
+ * IDs) and hides its whole parent card — title included, not just the chart canvas — via
+ * :has(), rather than guessing at the card's own Tailwind class list, which is reused
+ * across unrelated cards too. index.liquid's two chart rows are each wrapped in their own
+ * `div.grid`, so `:has()` without a direct-child combinator reaches through to the chart
+ * div nested one level deeper inside each row's individual card; the Status Trend panel is
+ * a single (non-grid) card, so that one targets its immediate parent directly.
+ *
+ * !important is required on the Status Trend card specifically — confirmed via the live
+ * DOM that the report's own JS sets an inline `style="display: block"` directly on that
+ * card (a trend-visibility toggle), which otherwise beats any stylesheet rule regardless
+ * of selector specificity. Applied to all five selectors for consistency/future-proofing,
+ * not just the one that needs it today.
+ */
+div.grid:has(#features-chart),
+div.grid:has(#device-os-chart),
+div:has(> #status-trend-chart),
+div.grid:has(#feature-scenarios-chart),
+div.grid:has(#feature-step-status-chart) {
+  display: none !important;
+}
+
+/* Features Overview table's ENVIRONMENT column always renders a browser icon
+ * (features_table.liquid) whose tooltip is `feature.browser` — the vendor's own fallback
+ * for "no browser metadata at all" is the literal two-word string "not known not known",
+ * not something cleaner like "—". scratch-e2e is a pure HTTP API suite — no browser is
+ * ever involved — so this is permanent noise here, not an occasional placeholder.
+ *
+ * Scoped to the exact fallback value (not just "any browser icon") so a genuinely
+ * browser-driven feature added later would still show its own real browser icon — this
+ * only hides the specific case of "nothing to show".
+ */
+#features-table-body span[title="not known not known"] {
+  display: none;
+}
+
+/* Every cell in a Features Overview row carries `py-4` (1rem top+bottom), on top of the
+ * feature-name cell's own tag-pill row below it — adds up to a lot of dead vertical space
+ * per row. Scoped to this table's body only (not its header, which keeps its own `py-3`)
+ * so row height elsewhere on the page is untouched. */
+#features-table-body td {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+/* Feature-detail page's header card (feature.liquid) splits into a side-by-side flex row
+ * at >=1024px — title/tags/description/metadata on the left, the 6 passed/failed/etc.
+ * tiles on the right. The right column is rarely as tall as the left (which carries the
+ * description box), leaving a large dead area beneath the tiles; the left column is
+ * squeezed to roughly half the card for the same reason the title/description wrap more
+ * than they need to.
+ *
+ * `.lg\:items-start` is this exact header flex container's own class (confirmed via grep —
+ * unique across every template; run_info_card.liquid has a similar-looking container but
+ * uses `lg:items-center` instead) — used here both as the stable selector hook and to
+ * override its own native effect: forcing `flex-direction: column` removes the row split
+ * entirely (the tiles grid is already second in document order, so it now drops below the
+ * title/description instead of beside them), and `align-items: stretch` replaces this
+ * class's own `align-items: flex-start` so both the content block and the tiles grid
+ * stretch to the card's full width rather than shrinking to their own content width.
+ *
+ * The tiles grid's own `lg:ml-6` (row-mode separation margin) and `sm:w-auto` (shrink-to-
+ * content width) only made sense in the row layout — neutralised so it spans full width
+ * at the bottom instead of sitting at the left with its own natural width.
+ */
+.lg\:items-start {
+  flex-direction: column;
+  align-items: stretch;
+}
+.xs\:grid-cols-3 {
+  margin-left: 0;
+  width: 100%;
+}
+
+/* scenario_card.liquid renders scenario.description TWICE — once as a clamped 2-line
+ * preview under the collapsed scenario's title (always visible), and again, in full, as a
+ * "DESCRIPTION" block that's the first thing shown once the scenario is expanded. Same
+ * field, same text, no distinction between the two beyond truncation.
+ *
+ * Keeping the full "DESCRIPTION" block (the only place it shows at all now) and hiding the
+ * collapsed-state preview instead — `.line-clamp-2` (confirmed via grep: unique to exactly
+ * this one div across every template) — so a collapsed scenario card shows just its title/
+ * tags, and the description only appears once the test author actually expands it.
+ */
+.scenario-card .line-clamp-2 {
+  display: none;
+}
+
+/* Explicit font sizes within a scenario card, per spec, rather than relative scaling (like
+ * the h2/h3/.font-medium 1.5x pass in report-overrides.js) — these are fixed target sizes,
+ * not "whatever it already is, bigger".
+ *
+ * Each selector is scoped to `.scenario-card` and picked to be specific enough not to leak
+ * into unrelated parts of the page (confirmed via grep against every template, not just
+ * this one):
+ * - `.scenario-card h4` — the scenario/outline title. h4 is also used for the Features-
+ *   overview and Scenarios "nothing found" empty-state headings (features_table.liquid,
+ *   feature.liquid), which is exactly why this isn't a bare `h4` selector.
+ * - `.scenario-card .bg-muted\/10` (+ its descendants) — the "DESCRIPTION" label and body
+ *   text together; this class combo is also used by media_modal.liquid, but that lives in
+ *   the page-level attachment-popup container, never nested inside a .scenario-card.
+ * - `.scenario-card p.text-sm` (+ its descendants, so the "+ Show Info" link scales with
+ *   it rather than staying at its own text-xs) — the one step row holding its keyword,
+ *   name, and attachment-toggle link together; confirmed the only <p class="text-sm"> in
+ *   the template.
+ */
+.scenario-card h4 {
+  font-size: 20px;
+}
+.scenario-card .bg-muted\/10,
+.scenario-card .bg-muted\/10 * {
+  font-size: 15px;
+}
+.scenario-card p.text-sm,
+.scenario-card p.text-sm * {
+  font-size: 15px;
+}
+
+/* Scenario title and its steps both sit at the same `px-6` (1.5rem) left padding at desktop
+ * width, so there's no visual indent telling a reader "these steps belong to this scenario"
+ * — the whole card just reads as one flat left edge. Narrowing the scenario button's own
+ * padding and widening each step row's creates a clear left-to-right hierarchy instead:
+ * scenario title closest to the edge, its steps indented in underneath it.
+ *
+ * `.scenario-card > button` — the direct-child toggle button is the only button at that
+ * level (confirmed via scenario_card.liquid: a scenario-card wraps exactly one button, then
+ * its hidden body). `.scenario-card .bg-muted\/20` — this exact class is also used
+ * elsewhere (features_table.liquid's pagination footer and empty-state message,
+ * feature.liquid's own description box and empty-state message — confirmed via grep), but
+ * none of those live inside a .scenario-card, so scoping to it reaches only each step row.
+ */
+.scenario-card > button {
+  padding-left: 0.75rem;
+}
+.scenario-card .bg-muted\/20 {
+  padding-left: 2.5rem;
+}

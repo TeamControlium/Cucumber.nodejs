@@ -1,0 +1,71 @@
+{
+  "name": "@controlium/cucumber-driver",
+  "version": "1.0.0-alpha.1",
+  "description": "Cucumber-JS driver for @controlium/framework — wires the framework's runner-agnostic lifecycle hooks into Cucumber's native Before/After/BeforeAll/AfterAll",
+  "type": "module",
+  "author": "Team Controllium contributors",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TeamControlium/cucumber.nodejs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./formatters/named-hook-json": {
+      "import": "./dist/esm/formatters/namedHookJsonFormatter.js",
+      "types": "./dist/types/formatters/namedHookJsonFormatter.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist coverage",
+    "build": "npm run clean && npm run build:esm",
+    "build:debug": "npm run clean && npm run build:esm:debug",
+    "build:debug:watch": "npm run clean && npm run build:esm:debug:watch",
+    "build:esm": "tsc -p tsconfig.build.json",
+    "build:esm:debug": "tsc -p tsconfig.build.debug.json",
+    "build:esm:debug:watch": "tsc -p tsconfig.build.debug.json --watch",
+    "lint": "eslint 'src/**/*.ts' --fix",
+    "test": "vitest run",
+    "test:e2e": "npm run build && node e2e-smoke/run.mjs",
+    "test:scratch-e2e": "npm run build:debug && bash scratch-e2e/scripts/run-scratch-e2e.sh"
+  },
+  "keywords": [
+    "controlium",
+    "cucumber",
+    "test-runner-driver"
+  ],
+  "peerDependencies": {
+    "@controlium/framework": ">=1.0.0-alpha.1",
+    "@controlium/utils": ">=1.0.2",
+    "@cucumber/cucumber": ">=10"
+  },
+  "devDependencies": {
+    "@controlium/framework": "^1.0.0-alpha.1",
+    "@controlium/utils": "^1.1.0",
+    "@cucumber/cucumber": "^13.2.1",
+    "@types/he": "^1.2.3",
+    "@types/node": "^24.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
+    "eslint": "^8.57.1",
+    "he": "^1.2.0",
+    "multiple-cucumber-html-reporter": "^4.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

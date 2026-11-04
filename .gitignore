@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+scratch-e2e/results/
+*.log
+.env
+.claude/
