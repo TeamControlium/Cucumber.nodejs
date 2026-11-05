@@ -1,10 +1,10 @@
 {
-  "name": "@controlium/cucumber-driver",
+  "name": "@controlium/cucumber",
   "version": "1.0.0-alpha.1",
   "description": "Cucumber-JS driver for @controlium/framework — wires the framework's runner-agnostic lifecycle hooks into Cucumber's native Before/After/BeforeAll/AfterAll",
   "type": "module",
   "author": "Team Controllium contributors",
-  "license": "Apache-2.0",
+  "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "https://github.com/TeamControlium/cucumber.nodejs"

@@ -62,19 +62,19 @@ export default {
 // is additionally tagged `@debug`.
 
 // `@cucumber/cucumber`'s own built-in `json` formatter drops Before/After hook `name`s
-// entirely (see @controlium/cucumber-driver's src/formatters/namedHookJsonFormatter.ts for
+// entirely (see @controlium/cucumber's src/formatters/namedHookJsonFormatter.ts for
 // the full why). `NamedHookJsonFormatter` is identical except it carries that name through —
 // used here instead of the plain `json:` formatter so hook names actually show up in the
 // generated HTML report (scratch-e2e/scripts/generate-report.js).
 //
 // A `format` entry's module specifier is resolved by dynamic `import()` from inside
-// @cucumber/cucumber's own package — a bare `@controlium/cucumber-driver/...` specifier
+// @cucumber/cucumber's own package — a bare `@controlium/cucumber/...` specifier
 // can't resolve there (it's not a dependency of @cucumber/cucumber), so resolve to a
 // `file://` URL ourselves first. That URL contains colons, which collides with the
 // formatter:target `name:target` syntax's own colon-separator — so it must be wrapped in
 // double quotes, which Cucumber-JS's format-descriptor parser explicitly supports for
 // exactly this reason. Verified both pieces empirically — see scratch-e2e/README.md.
-const namedHookJsonFormatterUrl = import.meta.resolve('@controlium/cucumber-driver/formatters/named-hook-json');
+const namedHookJsonFormatterUrl = import.meta.resolve('@controlium/cucumber/formatters/named-hook-json');
 
 export const common = {
   paths: ['scratch-e2e/features/**/*.feature'],

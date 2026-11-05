@@ -11,7 +11,7 @@ export interface CucumberGivenThenAPI {
 }
 
 function notImplemented(pattern: string): never {
-  throw new Error(`[cucumber-driver stepdefs] "${pattern}" is registered but not implemented yet.`);
+  throw new Error(`[cucumber stepdefs] "${pattern}" is registered but not implemented yet.`);
 }
 
 /**

@@ -3,7 +3,7 @@
 This folder is a worked example of the wiring pattern documented in
 `@controlium/framework`'s `docs/consumer/AGENTS.md` ("API-only suites") — a Cucumber suite
 that boots a tiny local API AUT via `API_AUTWrapper`, wired into Cucumber-JS via
-`@controlium/cucumber-driver`'s `wireCucumberHooks`/`wireCucumberStepTimeout`, then drives
+`@controlium/cucumber`'s `wireCucumberHooks`/`wireCucumberStepTimeout`, then drives
 and validates it.
 
 **Not published, not part of the package, not a real regression suite** — it exists purely

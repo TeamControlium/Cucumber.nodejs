@@ -1,6 +1,6 @@
-# @controlium/cucumber-driver
+# @controlium/cucumber
 
-Wires [`@controlium/framework`](https://github.com/TeamControlium/test-framework)'s
+Wires [`@controlium/framework`](https://github.com/TeamControlium/Framework.nodejs)'s
 runner-agnostic lifecycle functions (`beforeSuite`/`afterSuite`/`beforeTest`/`afterTest`)
 into Cucumber-JS's native hooks, and binds each test's Cucumber World to
 [`@controlium/utils`](https://github.com/TeamControlium/utils)'s `Settings`
@@ -16,7 +16,7 @@ bigger picture and open questions.
 ```ts
 // features/support/hooks.ts
 import * as Cucumber from '@cucumber/cucumber';
-import { wireCucumberHooks, wireCucumberStepTimeout } from '@controlium/cucumber-driver';
+import { wireCucumberHooks, wireCucumberStepTimeout } from '@controlium/cucumber';
 
 wireCucumberHooks(Cucumber);
 wireCucumberStepTimeout(Cucumber);

@@ -3,7 +3,6 @@ import { API_AUTWrapper } from '@controlium/framework';
 import { APIUtils, JsonUtils, Log, LogLevels, Utils, ValueExpression } from '@controlium/utils';
 
 import { getDataTableRows } from '../../dataTable/cucumberDataTable.js';
-import { resolveAppName } from './resolveAppName.js';
 
 /**
  * The slice of `@cucumber/cucumber` `wireApiHeaderStepDefinitions` needs.
@@ -292,7 +291,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
    * Given request headers for [MyApp] are [merged] with "{'X-Trace-Id': '123'}"
    * Given request headers for AUT are '{"Authorization": "Bearer abc"}'
    */
-  Given(/^request headers for (AUT|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)")$/, async function (
+  Given(/^request headers for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)")$/, async function (
       requestTarget: string,
       modeCapture: string | undefined,
       headerDataSingleQuoted: string | undefined,
@@ -302,11 +301,11 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
       const headerData = headerDataSingleQuoted ?? headerDataDoubleQuoted as string;
       Log.writeLine(LogLevels.TestInformation, `STEP request headers for ${requestTarget} are [${mode}] with [${headerData}]`);
 
-      const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+      const aut = API_AUTWrapper.resolveTarget(requestTarget);
 
       const literalHeaders = JsonUtils.parseObjectLiteral(
         headerData,
-        `[cucumber-driver stepdefs] "request headers for ${requestTarget} are ${mode} with '...'" — header data`,
+        `[cucumber stepdefs] "request headers for ${requestTarget} are ${mode} with '...'" — header data`,
         true
       );
 
@@ -327,7 +326,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
    *   | Header Key | Value        |
    *   | X-Trace-Id | number:12345 |
    */
-  Given(/^request headers for (AUT|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)");$/, async function (
+  Given(/^request headers for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)");$/, async function (
       requestTarget: string,
       modeCapture: string | undefined,
       headerDataSingleQuoted: string | undefined,
@@ -338,11 +337,11 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
       const headerData = headerDataSingleQuoted ?? headerDataDoubleQuoted as string;
       Log.writeLine(LogLevels.TestInformation, `STEP request headers for ${requestTarget} are [${mode}] with [${headerData}] (+ DataTable)`);
 
-      const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+      const aut = API_AUTWrapper.resolveTarget(requestTarget);
 
       const literalHeaders = JsonUtils.parseObjectLiteral(
         headerData,
-        `[cucumber-driver stepdefs] "request headers for ${requestTarget} are ${mode} with '...'" — header data`,
+        `[cucumber stepdefs] "request headers for ${requestTarget} are ${mode} with '...'" — header data`,
         true
       );
 
@@ -365,11 +364,11 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
    * Given request headers for AUT are [replaced] using test data file [headers/auth.json]
    * Given request headers for [MyApp] are [merged] using test data file [headers/trace.json]
    */
-  Given(/^request headers for (AUT|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\]$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string) {
+  Given(/^request headers for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\]$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string) {
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP request headers for ${requestTarget} are [${mode}] using test data file [${filename}]`);
 
-      const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+      const aut = API_AUTWrapper.resolveTarget(requestTarget);
       const fileHeaders = await resolveHeadersFromTestDataFile(filename);
 
       await applyHeaders(aut, mode, fileHeaders);
@@ -389,11 +388,11 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
    *   | Header Key | Value          |
    *   | X-Trace-Id | 123            |
    */
-  Given(/^request headers for (AUT|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\];$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string, dataTable: DataTable) {
+  Given(/^request headers for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\];$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string, dataTable: DataTable) {
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP request headers for ${requestTarget} are [${mode}] using test data file [${filename}] (+ DataTable)`);
 
-      const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+      const aut = API_AUTWrapper.resolveTarget(requestTarget);
       const fileHeaders = await resolveHeadersFromTestDataFile(filename);
 
       // DataTable always wins on key collision with the file-sourced base — see
@@ -421,11 +420,11 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
    *   | Authorization | Bearer abc  |
    *   | X-Trace-Id    | number:123  |
    */
-  Given(/^request headers for (AUT|\[.*\]) are(?: \[(replaced|merged)\] with)?;$/, async function (requestTarget: string, modeCapture: string | undefined, dataTable: DataTable) {
+  Given(/^request headers for (AUT|EndPoint|\[.*\]) are(?: \[(replaced|merged)\] with)?;$/, async function (requestTarget: string, modeCapture: string | undefined, dataTable: DataTable) {
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP request headers for ${requestTarget} are [${mode}]`);
 
-      const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+      const aut = API_AUTWrapper.resolveTarget(requestTarget);
       const headers = await resolveDataTableOverrideHeaders(dataTable);
       await applyHeaders(aut, mode, headers);
     }
@@ -453,7 +452,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
 
       const literalHeaders = JsonUtils.parseObjectLiteral(
         headerData,
-        `[cucumber-driver stepdefs] "next API request headers are ${mode} with '...'" — header data`,
+        `[cucumber stepdefs] "next API request headers are ${mode} with '...'" — header data`,
         true
       );
 
@@ -490,7 +489,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
 
       const literalHeaders = JsonUtils.parseObjectLiteral(
         headerData,
-        `[cucumber-driver stepdefs] "next API request headers are ${mode} with '...'" — header data`,
+        `[cucumber stepdefs] "next API request headers are ${mode} with '...'" — header data`,
         true
       );
 

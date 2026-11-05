@@ -22,12 +22,12 @@ import { JsonFormatter } from '@cucumber/cucumber';
  *
  * Use it wherever a `json:<path>` formatter entry would otherwise go — on the CLI:
  * ```
- * cucumber-js --format @controlium/cucumber-driver/formatters/named-hook-json:results.json
+ * cucumber-js --format @controlium/cucumber/formatters/named-hook-json:results.json
  * ```
  * or the same string inside a `cucumber.js` config's own `format` array:
  * ```js
  * export const common = {
- *   format: ['summary', '@controlium/cucumber-driver/formatters/named-hook-json:results.json'],
+ *   format: ['summary', '@controlium/cucumber/formatters/named-hook-json:results.json'],
  * };
  * ```
  * Cucumber-JS resolves a `format` entry's module specifier identically either way — there is

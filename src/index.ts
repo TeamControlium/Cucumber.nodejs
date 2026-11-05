@@ -75,7 +75,7 @@ export interface CucumberHookAPI {
  * @example
  * // features/support/hooks.ts
  * import * as Cucumber from '@cucumber/cucumber';
- * import { wireCucumberHooks } from '@controlium/cucumber-driver';
+ * import { wireCucumberHooks } from '@controlium/cucumber';
  *
  * wireCucumberHooks(Cucumber);
  *
@@ -92,7 +92,7 @@ export interface CucumberHookAPI {
  * @example
  * // features/support/hooks.ts
  * import * as Cucumber from '@cucumber/cucumber';
- * import { wireCucumberHooks } from '@controlium/cucumber-driver';
+ * import { wireCucumberHooks } from '@controlium/cucumber';
  *
  * wireCucumberHooks(Cucumber);
  *
@@ -177,7 +177,7 @@ export interface CucumberTimeoutAPI {
  * @example
  * // features/support/hooks.ts
  * import * as Cucumber from '@cucumber/cucumber';
- * import { wireCucumberStepTimeout } from '@controlium/cucumber-driver';
+ * import { wireCucumberStepTimeout } from '@controlium/cucumber';
  *
  * wireCucumberStepTimeout(Cucumber);
  *

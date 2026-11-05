@@ -3,7 +3,6 @@ import { API_AUTWrapper } from '@controlium/framework';
 import { APIUtils, Log, LogLevels, StringUtils, Utils, ValueExpression } from '@controlium/utils';
 
 import { getDataTableRows } from '../../dataTable/cucumberDataTable.js';
-import { resolveAppName } from './resolveAppName.js';
 
 /**
  * The slice of `@cucumber/cucumber` `wireApiRequestStepDefinitions` needs.
@@ -59,7 +58,7 @@ async function resolveLiteralRequestBody(
   if ((bodyKind ?? 'text') === 'text') {
     if (!Utils.isUndefined(dataTable)) {
       throw new Error(
-        '[cucumber-driver stepdefs] DataTable overrides can only be used with "json", "xml" or "yaml" body.'
+        '[cucumber stepdefs] DataTable overrides can only be used with "json", "xml" or "yaml" body.'
       );
     }
     return APIUtils.resolveLiteralRequestBody('text', literalBody);
@@ -93,7 +92,7 @@ async function resolveFileRequestBody(
   if (bodyKind === 'bin') {
     if (!Utils.isUndefined(dataTable)) {
       throw new Error(
-        '[cucumber-driver stepdefs] DataTable overrides can only be used with "json", "xml" or "yaml" body — "bin" (raw binary) has no structure to mutate.'
+        '[cucumber stepdefs] DataTable overrides can only be used with "json", "xml" or "yaml" body — "bin" (raw binary) has no structure to mutate.'
       );
     }
     return APIUtils.resolveBinaryFileRequestBody(filename);
@@ -246,9 +245,9 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    * Given requests to AUT use resource path preamble [V2]
    * Given requests to [MyApp] use resource path preamble [V1]
    */
-  Given(/^requests to (AUT|\[[^[\]]*\]) use resource path preamble \[(.*)\]$/, function (requestTarget: string, name: string) {
+  Given(/^requests to (AUT|EndPoint|\[[^[\]]*\]) use resource path preamble \[(.*)\]$/, function (requestTarget: string, name: string) {
     Log.writeLine(LogLevels.TestInformation, `STEP ${requestTarget} uses resource path preamble [${name}]`);
-    const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+    const aut = API_AUTWrapper.resolveTarget(requestTarget);
     aut.useResourcePathPreamble(name);
   });
 
@@ -262,7 +261,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    * When a 'GET' request to AUT path '/users'
    * When a "DELETE" request to [MyApp] path '/users/42'
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)")$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)")$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -272,7 +271,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
     const method = methodSingleQuoted ?? methodDoubleQuoted as string;
     const resourcePath = pathSingleQuoted ?? pathDoubleQuoted as string;
     Log.writeLine(LogLevels.TestInformation, `STEP: [${method}] request to ${requestTarget} path [${resourcePath}]`);
-    const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+    const aut = API_AUTWrapper.resolveTarget(requestTarget);
     await aut.request(method, resourcePath);
   }
   );
@@ -290,7 +289,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    * When a 'POST' request to AUT path '/users', [json] body '{"name": "Bob"}'
    * When a 'POST' request to AUT path '/users', [xml] body '<user><name>Bob</name></user>'
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text)\] )?body (?:'(.*)'|"(.*)")$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text)\] )?body (?:'(.*)'|"(.*)")$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -307,7 +306,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [${bodyKind ?? 'text'}] body '${requestBody}'`
     );
-    const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+    const aut = API_AUTWrapper.resolveTarget(requestTarget);
     const { body, contentType } = await resolveLiteralRequestBody(bodyKind, requestBody, undefined);
     await aut.request(method, resourcePath, { body, contentType });
   }
@@ -329,7 +328,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    *   | XPath      | Value |
    *   | /user/role | admin |
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text)\] )?body (?:'(.*)'|"(.*)");$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text)\] )?body (?:'(.*)'|"(.*)");$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -347,7 +346,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [${bodyKind ?? 'text'}] body '${requestBody}'; (+ DataTable)`
     );
-    const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+    const aut = API_AUTWrapper.resolveTarget(requestTarget);
     const { body, contentType } = await resolveLiteralRequestBody(bodyKind, requestBody, dataTable);
     await aut.request(method, resourcePath, { body, contentType });
   }
@@ -418,7 +417,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    *   line two
    *   """
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml)\] )?body(?: \((?:'(.*)'|"(.*)") line endings\))?:$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml)\] )?body(?: \((?:'(.*)'|"(.*)") line endings\))?:$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -438,7 +437,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [${bodyKind ?? 'text'}] body from DocString (${docStringContent.length} chars)`
     );
-    const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+    const aut = API_AUTWrapper.resolveTarget(requestTarget);
     const { body, contentType } = await resolveLiteralRequestBody(bodyKind, requestBody, undefined);
     await aut.request(method, resourcePath, { body, contentType });
   }
@@ -465,7 +464,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    * When a 'POST' request to AUT path '/users', file [users/rawBody.txt]
    * When a 'POST' request to AUT path '/upload', [bin] file [images/photo.png]
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml|bin)\] )?file \[(.*)\]$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml|bin)\] )?file \[(.*)\]$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -480,7 +479,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [${bodyKind ?? 'text'}] body from test data file [${filename}]`
     );
-    const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+    const aut = API_AUTWrapper.resolveTarget(requestTarget);
     const { body, contentType } = await resolveFileRequestBody(bodyKind, filename, undefined);
     await aut.request(method, resourcePath, { body, contentType });
   }
@@ -500,7 +499,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    *   | JSON-Path | Value |
    *   | $.role    | admin |
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml|bin)\] )?file \[(.*)\];$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml|bin)\] )?file \[(.*)\];$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -516,7 +515,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [${bodyKind ?? 'text'}] body from test data file [${filename}]; (+ DataTable)`
     );
-    const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+    const aut = API_AUTWrapper.resolveTarget(requestTarget);
     const { body, contentType } = await resolveFileRequestBody(bodyKind, filename, dataTable);
     await aut.request(method, resourcePath, { body, contentType });
   }
@@ -549,7 +548,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    *   | $.name    | Bob       |
    *   | $.age     | number:42 |
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), json body;$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), json body;$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -563,7 +562,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [json] body built entirely from DataTable`
     );
-    const aut = API_AUTWrapper.getApplication(resolveAppName(requestTarget));
+    const aut = API_AUTWrapper.resolveTarget(requestTarget);
     const modifications = await resolveModifications('JSON-Path', dataTable);
     const { body, contentType } = await APIUtils.resolveLiteralRequestBody('json', '{}', modifications);
     await aut.request(method, resourcePath, { body, contentType });

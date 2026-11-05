@@ -2,7 +2,7 @@ import * as Cucumber from '@cucumber/cucumber';
 import { API_AUTWrapper } from '@controlium/framework';
 
 // Imports this repo's own compiled output, same convention as e2e-smoke — a real consumer
-// imports from the published '@controlium/cucumber-driver' package instead.
+// imports from the published '@controlium/cucumber' package instead.
 import { wireCucumberHooks, wireCucumberStepTimeout } from '../../dist/esm/index.js';
 
 import { startTargetApp } from '../target-app/server.js';
