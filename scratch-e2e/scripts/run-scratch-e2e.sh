@@ -2,14 +2,22 @@
 set -e
 
 #
-# Runs the scratch-e2e example suite — scoped down to two modes (full/debug; see
-# scratch-e2e/README.md for why). Not a real regression runner — scratch-e2e is an
-# illustrative example, not a published part of this package.
+# Runs the scratch-e2e example suite. Two named modes (full/debug; see
+# scratch-e2e/README.md for why), plus an ad-hoc tag-expression fallback for anything else —
+# same three-way shape as ea-eq-bff's own e2e/scripts/regression-test-runner.sh. Not a real
+# regression runner — scratch-e2e is an illustrative example, not a published part of this
+# package.
 #
 # Called with no parameter at all (no 'full'/'debug', nothing else): runs with 'full'
 # mode's own settings (log level, port, profile) but with NO tag filter applied at all —
 # every feature file runs, tagged or not, including ones (e.g. request-docstring-body's
 # own @Debug tag) that 'full'/'debug' would otherwise exclude/include selectively.
+#
+# Called with one or more arguments that aren't 'full'/'debug': every argument is joined
+# with spaces and used verbatim as the Cucumber --tags expression, e.g.
+#   bash run-scratch-e2e.sh @api and @request and @body
+# runs with 'full' mode's own profile/port, Test Debug logging (a targeted ad-hoc run
+# benefits from the more verbose default), and that tag expression instead of @full/@Full.
 #
 
 # No parameter at all: use 'full' settings below, but remember to drop CUCUMBER_TAGS
@@ -23,9 +31,16 @@ fi
 export TEST_TIMESTAMP="$(date)"
 export CUCUMBER_STEP_TIMEOUT=20000
 
+# Cucumber here always runs against the debug build (tsconfig.build.debug.json sets
+# sourceMap/inlineSources — see that file's own comment), so the .map files Node needs this
+# flag for already exist, with the original .ts text embedded directly in them. Appended to
+# whatever NODE_OPTIONS the caller's shell already has, not overwritten, so this doesn't
+# clobber an unrelated flag (e.g. --max-old-space-size) someone's already set.
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--enable-source-maps"
+
 # Set required environment vars based on type of run.
 PROFILE=""
-# Mirrors scratch-e2e/config/cucumber.js's own per-profile testAUTDetails['Scratch Target
+# Mirrors scratch-e2e/config/cucumber.js's own per-profile testAUTs['Scratch Target
 # App'].port — kept here too (rather than read back out of that file) purely so this script
 # can kill anything already on it below, before Cucumber ever starts.
 TARGET_APP_PORT=""
@@ -43,8 +58,15 @@ case "$1" in
     TARGET_APP_PORT=3899
     ;;
   *)
-    echo "Unknown mode [$1]. Expected 'full' or 'debug'." >&2
-    exit 1
+    # Not a known mode — treat every argument as a Cucumber tag expression, joined with
+    # spaces (mirrors ea-eq-bff's own "${ARGS[*]}" fallback). Runs against 'full' mode's
+    # own profile/port (an arbitrary tag expression has no mode of its own to pick one
+    # from), with Test Debug logging — a targeted ad-hoc run benefits from the more
+    # verbose default, same choice legacy's own fallback makes.
+    export CUCUMBER_TAGS="$*"
+    export TEST_LOG_LEVEL="Test Debug"
+    PROFILE="full"
+    TARGET_APP_PORT=3999
     ;;
 esac
 
@@ -142,5 +164,3 @@ if [ -f "$REPORT_INDEX" ]; then
 fi
 
 exit "$CUCUMBER_EXIT_CODE"
-
-excellent

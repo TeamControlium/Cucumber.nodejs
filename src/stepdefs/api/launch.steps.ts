@@ -67,7 +67,7 @@ export function wireApiLaunchStepDefinitions(cucumber: CucumberGivenThenAPI): vo
    * No diagnostic dump here beyond the one-line `STEP` marker —
    * {@link API_AUTWrapper.startApplication} itself already logs the AUT's resolved
    * configuration (`loadSettings`'s own summary) and, once started, its live state (resolved
-   * URL, `isControlled`, current headers), so every driver gets that for free without
+   * URL, `isSelfManaged`, current headers), so every driver gets that for free without
    * reimplementing it.
    *
    * @example

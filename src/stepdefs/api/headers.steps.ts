@@ -2,7 +2,7 @@ import type { DataTable, Given as CucumberGiven, When as CucumberWhen } from '@c
 import { API_AUTWrapper } from '@controlium/framework';
 import { APIUtils, JsonUtils, Log, LogLevels, Utils, ValueExpression } from '@controlium/utils';
 
-import { getDataTableRows } from '../../dataTable/cucumberDataTable.js';
+import { resolveDataTableRows } from '../../dataTable/cucumberDataTable.js';
 
 /**
  * The slice of `@cucumber/cucumber` `wireApiHeaderStepDefinitions` needs.
@@ -31,7 +31,7 @@ function resolveMode(mode: string | undefined): 'replaced' | 'merged' {
  */
 async function resolveDataTableOverrideHeaders(dataTable: DataTable | undefined): Promise<Record<string, unknown>> {
   if (Utils.isUndefined(dataTable)) return {};
-  const rows = getDataTableRows(dataTable, ['Header Key', 'Value']);
+  const rows = await resolveDataTableRows(dataTable, ['Header Key', 'Value']);
   const rawHeaders = JsonUtils.buildObjectFromRows(rows, 'Header Key', 'Value');
   const resolvedEntries = await Promise.all(
     Object.entries(rawHeaders).map(async ([key, value]) => [key, await ValueExpression.parse(value, { useJson5: true })] as const)
@@ -40,20 +40,21 @@ async function resolveDataTableOverrideHeaders(dataTable: DataTable | undefined)
 }
 
 /**
- * Extracts a header-configuration DataTable's raw `Value` column text, **unresolved** —
- * used only by the one-shot "next request" overrides further down, which must defer
- * `ValueExpression.parse`'s own detokenisation (and `number:`/`boolean:`/`json:`/`file:`
- * casting) to the moment `API_AUTWrapper.request()` actually consumes the override, rather
- * than resolving it here, eagerly, at step-definition time — see
- * `API_AUTWrapper.setNextRequestHeaders`'s own doc comment for why. The session-level
- * patterns above still resolve immediately via {@link resolveDataTableOverrideHeaders} —
- * eager resolution is exactly what a session-level "set this now" step should do; only the
- * one-shot override needs to defer. Returns `undefined` when no DataTable was attached (the
- * literal/file-sourced one-shot patterns' override is optional).
+ * Extracts a header-configuration DataTable's raw `Value` column text — used only by the
+ * one-shot "next request" overrides further down, which still defer `ValueExpression.parse`'s
+ * own `number:`/`boolean:`/`json:`/`file:` casting to the moment `API_AUTWrapper.request()`
+ * actually consumes the override, rather than resolving it here, eagerly, at step-definition
+ * time — see `API_AUTWrapper.setNextRequestHeaders`'s own doc comment for why. The
+ * session-level patterns above still resolve immediately via
+ * {@link resolveDataTableOverrideHeaders} — eager resolution is exactly what a session-level
+ * "set this now" step should do; only the one-shot override's *cast* still defers.
+ *
+ * Returns `undefined` when no DataTable was attached (the literal/file-sourced one-shot
+ * patterns' override is optional).
  */
-function extractNextRequestDataTableHeaderExpressions(dataTable: DataTable | undefined): Record<string, string> | undefined {
+async function extractNextRequestDataTableHeaderExpressions(dataTable: DataTable | undefined): Promise<Record<string, string> | undefined> {
   if (Utils.isUndefined(dataTable)) return undefined;
-  const rows = getDataTableRows(dataTable, ['Header Key', 'Value']);
+  const rows = await resolveDataTableRows(dataTable, ['Header Key', 'Value']);
   return JsonUtils.buildObjectFromRows(rows, 'Header Key', 'Value');
 }
 
@@ -78,8 +79,9 @@ async function applyHeaders(aut: API_AUTWrapper, mode: 'replaced' | 'merged', he
  * Stages a resolved headers object as the static one-shot "next request" override, via
  * `API_AUTWrapper.setNextRequestHeaders`/`mergeNextRequestHeaders` depending on `mode` — no
  * `aut` argument, since the override is genuinely global (see this file's own class doc,
- * "Next request only" section). Synchronous — staging never detokenises; `request()` itself
- * does that lazily when it actually consumes the override.
+ * "Next request only" section). Synchronous — nothing about staging is async; the only
+ * deferred part is `dataTableValueExpressions`'s own `ValueExpression.parse` cast, resolved
+ * lazily when `request()` actually consumes the override.
  *
  * `headers` — the literal/file-sourced portion — is validated here, since its shape is
  * already fully known (plain JSON5-parsed values, never `ValueExpression` verb-grammar).
@@ -105,10 +107,11 @@ function applyNextRequestHeaders(
  * Loads a test-data file's contents as a JSON headers object, via
  * `ValueExpression.parse('file,json:<filename>', { useJson5: true })` — reusing the same
  * source×cast grammar a DataTable cell's `Value` column uses, rather than hand-rolling file
- * reading/parsing here. Gets the path resolved via `Utils.resolveTestDataPath`, detokenised
- * (path, then content), and JSON5-parsed for free — same "test fixture data, not a literal
- * string going anywhere" reasoning as {@link resolveDataTableOverrideHeaders}'s own doc
- * comment. Shape-validated via {@link JsonUtils.assertPlainObject}.
+ * reading/parsing here. Gets the path resolved via `Utils.resolveTestDataPath`, the file's
+ * content read verbatim (no token resolution on either the path or the content), and
+ * JSON5-parsed for free — same "test fixture data, not a literal string going anywhere"
+ * reasoning as {@link resolveDataTableOverrideHeaders}'s own doc comment. Shape-validated via
+ * {@link JsonUtils.assertPlainObject}.
  */
 async function resolveHeadersFromTestDataFile(filename: string): Promise<Record<string, unknown>> {
   const fileHeaders = await ValueExpression.parse(`file,json:${filename}`, { useJson5: true });
@@ -141,10 +144,10 @@ async function resolveHeadersFromTestDataFile(filename: string): Promise<Record<
  * `replaced` → `setHeaders()`, `merged` → `mergeHeaders()` — so a reader can map the
  * Gherkin wording straight onto the framework call with no translation layer in between.
  *
- * No "detokenised" variant of these patterns — `API_AUTWrapper.request()` (and, for the
- * session-level ones, `setHeaders`/`mergeHeaders` themselves) detokenise unconditionally
- * (see their own doc comments), so there is no per-step choice to word a pattern around; a
- * step reading "header data" is always detokenised.
+ * No token (`[[...]]`) resolution happens anywhere in this file — `API_AUTWrapper.request()`
+ * and `setHeaders`/`mergeHeaders` take whatever header value reaches them exactly as given,
+ * so there is no per-step choice to word a pattern around; a step reading "header data"
+ * never has its tokens resolved.
  *
  * A trailing `;` means "a DataTable follows" — same convention as `request.steps.ts`'s own
  * literal-body patterns (see that file's own doc comment for the full reasoning, not
@@ -291,7 +294,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
    * Given request headers for [MyApp] are [merged] with "{'X-Trace-Id': '123'}"
    * Given request headers for AUT are '{"Authorization": "Bearer abc"}'
    */
-  Given(/^request headers for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)")$/, async function (
+  Given(/^request headers for (AUT|API|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)")$/, async function (
       requestTarget: string,
       modeCapture: string | undefined,
       headerDataSingleQuoted: string | undefined,
@@ -301,7 +304,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
       const headerData = headerDataSingleQuoted ?? headerDataDoubleQuoted as string;
       Log.writeLine(LogLevels.TestInformation, `STEP request headers for ${requestTarget} are [${mode}] with [${headerData}]`);
 
-      const aut = API_AUTWrapper.resolveTarget(requestTarget);
+      const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
 
       const literalHeaders = JsonUtils.parseObjectLiteral(
         headerData,
@@ -326,7 +329,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
    *   | Header Key | Value        |
    *   | X-Trace-Id | number:12345 |
    */
-  Given(/^request headers for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)");$/, async function (
+  Given(/^request headers for (AUT|API|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)");$/, async function (
       requestTarget: string,
       modeCapture: string | undefined,
       headerDataSingleQuoted: string | undefined,
@@ -337,7 +340,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
       const headerData = headerDataSingleQuoted ?? headerDataDoubleQuoted as string;
       Log.writeLine(LogLevels.TestInformation, `STEP request headers for ${requestTarget} are [${mode}] with [${headerData}] (+ DataTable)`);
 
-      const aut = API_AUTWrapper.resolveTarget(requestTarget);
+      const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
 
       const literalHeaders = JsonUtils.parseObjectLiteral(
         headerData,
@@ -364,11 +367,11 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
    * Given request headers for AUT are [replaced] using test data file [headers/auth.json]
    * Given request headers for [MyApp] are [merged] using test data file [headers/trace.json]
    */
-  Given(/^request headers for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\]$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string) {
+  Given(/^request headers for (AUT|API|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\]$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string) {
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP request headers for ${requestTarget} are [${mode}] using test data file [${filename}]`);
 
-      const aut = API_AUTWrapper.resolveTarget(requestTarget);
+      const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
       const fileHeaders = await resolveHeadersFromTestDataFile(filename);
 
       await applyHeaders(aut, mode, fileHeaders);
@@ -388,11 +391,11 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
    *   | Header Key | Value          |
    *   | X-Trace-Id | 123            |
    */
-  Given(/^request headers for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\];$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string, dataTable: DataTable) {
+  Given(/^request headers for (AUT|API|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\];$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string, dataTable: DataTable) {
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP request headers for ${requestTarget} are [${mode}] using test data file [${filename}] (+ DataTable)`);
 
-      const aut = API_AUTWrapper.resolveTarget(requestTarget);
+      const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
       const fileHeaders = await resolveHeadersFromTestDataFile(filename);
 
       // DataTable always wins on key collision with the file-sourced base — see
@@ -420,11 +423,11 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
    *   | Authorization | Bearer abc  |
    *   | X-Trace-Id    | number:123  |
    */
-  Given(/^request headers for (AUT|EndPoint|\[.*\]) are(?: \[(replaced|merged)\] with)?;$/, async function (requestTarget: string, modeCapture: string | undefined, dataTable: DataTable) {
+  Given(/^request headers for (AUT|API|\[.*\]) are(?: \[(replaced|merged)\] with)?;$/, async function (requestTarget: string, modeCapture: string | undefined, dataTable: DataTable) {
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP request headers for ${requestTarget} are [${mode}]`);
 
-      const aut = API_AUTWrapper.resolveTarget(requestTarget);
+      const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
       const headers = await resolveDataTableOverrideHeaders(dataTable);
       await applyHeaders(aut, mode, headers);
     }
@@ -493,7 +496,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
         true
       );
 
-      const dataTableValueExpressions = extractNextRequestDataTableHeaderExpressions(dataTable);
+      const dataTableValueExpressions = await extractNextRequestDataTableHeaderExpressions(dataTable);
 
       applyNextRequestHeaders(mode, literalHeaders, dataTableValueExpressions);
     }
@@ -538,7 +541,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
       Log.writeLine(LogLevels.TestInformation, `STEP next API request headers are [${mode}] using test data file [${filename}] (+ DataTable)`);
 
       const fileHeaders = await resolveHeadersFromTestDataFile(filename);
-      const dataTableValueExpressions = extractNextRequestDataTableHeaderExpressions(dataTable);
+      const dataTableValueExpressions = await extractNextRequestDataTableHeaderExpressions(dataTable);
 
       applyNextRequestHeaders(mode, fileHeaders, dataTableValueExpressions);
     }
@@ -566,7 +569,7 @@ export function wireApiHeaderStepDefinitions(cucumber: CucumberGivenWhenAPI): vo
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP next API request headers are [${mode}]`);
 
-      const dataTableValueExpressions = extractNextRequestDataTableHeaderExpressions(dataTable);
+      const dataTableValueExpressions = await extractNextRequestDataTableHeaderExpressions(dataTable);
       applyNextRequestHeaders(mode, {}, dataTableValueExpressions);
     }
   );

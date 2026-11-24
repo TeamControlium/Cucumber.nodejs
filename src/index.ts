@@ -1,8 +1,8 @@
-import type { After, AfterAll, Before, BeforeAll, IWorld, setDefaultTimeout } from '@cucumber/cucumber';
+import type { After, AfterAll, Before, BeforeAll, BeforeStep, ITestStepHookParameter, IWorld, setDefaultTimeout } from '@cucumber/cucumber';
 import he from 'he';
 
 import { afterSuite, afterTest, beforeSuite, beforeTest, resolveStepTimeoutFromSettings } from '@controlium/framework';
-import { Logger, LogLevels, Settings, Utils } from '@controlium/utils';
+import { Detokeniser, Logger, LogLevels, Settings, Utils } from '@controlium/utils';
 
 export {
   wireAllStepDefinitions,
@@ -15,6 +15,7 @@ export {
   wireApiQueryStringStepDefinitions,
   wireApiRequestStepDefinitions,
   wireApiValidationStepDefinitions,
+  wireApiHeaderValidationStepDefinitions,
 } from './stepdefs/index.js';
 export type {
   CucumberAllStepDefinitionsAPI,
@@ -25,9 +26,10 @@ export type {
   CucumberQueryStringGivenWhenAPI,
   CucumberRequestGivenWhenAPI,
   CucumberThenAPI,
+  CucumberHeaderValidationThenAPI,
 } from './stepdefs/index.js';
 
-export { getDataTableRows } from './dataTable/cucumberDataTable.js';
+export { resolveDataTableRows } from './dataTable/cucumberDataTable.js';
 
 /**
  * Builds a {@link Logger.logOutputCallback} that forwards log output to this scenario's
@@ -56,8 +58,56 @@ function buildAttachCallback(world: IWorld): (text: string, mediaType: string | 
 export interface CucumberHookAPI {
   BeforeAll: typeof BeforeAll;
   Before: typeof Before;
+  BeforeStep: typeof BeforeStep;
   After: typeof After;
   AfterAll: typeof AfterAll;
+}
+
+/**
+ * Enforces this package's `;`-terminated step wording convention both ways: a step's text
+ * ends in `;` exactly when a DataTable is attached to it. Registered once, via
+ * {@link wireCucumberHooks}'s `BeforeStep` call, against every step in every feature, so it
+ * catches every `;`-terminated pattern's mismatches at once, with no check needed inside
+ * any individual handler.
+ *
+ * Cucumber-JS catches both mismatches on its own, but never names the DataTable as the
+ * cause:
+ * - Missing table: every table-consuming handler here is `async function(..., dataTable)`.
+ *   Drop the table and Cucumber's resolved parameter count drops to match that handler's
+ *   arity once `UserCodeRunner.run` appends its own callback argument — satisfying both its
+ *   callback-style and (since the handler is `async`) promise-style checks at once. Result:
+ *   "function uses multiple asynchronous interfaces: callback and promise", no mention of a
+ *   table.
+ * - Unexpected table: `StepDefinition.getInvocationParameters`'s `validCodeLengths` check in
+ *   `step_runner.js` fails the call before the handler runs — "function has N arguments,
+ *   should have M…" — again, no mention of a table.
+ *
+ * A `BeforeStep` hook catches both before either generic error fires, reading the step's
+ * text and argument straight off the pickle, and reports the actual problem instead.
+ *
+ * @throws {Error} If `pickleStep.text`'s trailing `;` disagrees with whether
+ *   `pickleStep.argument.dataTable` is present. Names the step text with its
+ *   `Given`/`When`/`Then` keyword restored (Gherkin's pickle compiler drops it from `text`
+ *   and normalises `And`/`But` into one of the three — see `PickleStepType` in
+ *   `@cucumber/messages`). Logged at `Error` level before throwing, so it's on record
+ *   either way.
+ */
+function guardStepDataTableExistance({ pickleStep }: ITestStepHookParameter): void {
+  const keyword =
+    pickleStep.type === 'Context' ? 'Given' :
+      pickleStep.type === 'Action' ? 'When' :
+        pickleStep.type === 'Outcome' ? 'Then' :
+          '<Step>';
+  const endsWithSemicolon = pickleStep.text.endsWith(';');
+  const hasDataTable = !Utils.isUndefined(pickleStep.argument?.dataTable);
+  if (endsWithSemicolon === hasDataTable) return;
+
+  const mismatch = endsWithSemicolon ? 'but has no Data Table' : 'but has a Data Table';
+  const errText = `Step terminated ${endsWithSemicolon ? 'with' : 'without'} [;] ${mismatch}! Step: [${keyword} ${pickleStep.text}]`;
+  const errDetails = `Framework uses a step's trailing semicolon [;] to indicate a Cucumber DataTable follows the step. ${endsWithSemicolon ? 'Semi-colon terminated steps must have a Data Table.' : 'If step has a Data Table step text must terminate with a semi-colon.'}`;
+
+  Logger.writeLine(LogLevels.Error, `${errText}\n\n${errDetails}`, { suppressAllPreamble: true });
+  throw new Error(errText);
 }
 
 /**
@@ -106,7 +156,7 @@ export function wireCucumberHooks(cucumber: CucumberHookAPI): void {
     );
   }
 
-  (['BeforeAll', 'Before', 'After', 'AfterAll'] as const).forEach((hookName) => {
+  (['BeforeAll', 'Before', 'BeforeStep', 'After', 'AfterAll'] as const).forEach((hookName) => {
     if (typeof cucumber[hookName] !== 'function') {
       throw new Error(
         `wireCucumberHooks: [cucumber.${hookName}] must be a function — received ${typeof cucumber[hookName]}. Did you pass the '@cucumber/cucumber' module itself?`
@@ -116,6 +166,11 @@ export function wireCucumberHooks(cucumber: CucumberHookAPI): void {
 
   cucumber.BeforeAll(beforeSuite);
 
+  // Runs before every step, in every feature — see guardStepDataTableExistance's
+  // own doc comment for why this check belongs here, as a BeforeStep hook, rather than inside
+  // any individual step definition's own handler.
+  cucumber.BeforeStep(guardStepDataTableExistance);
+
   // Cucumber runs Before hooks in registration order. Settings.setContext runs before
   // beforeTest() — not after — because beforeTest() itself now resolves/applies
   // Logger.loggingLevel/maxLines from settings (see @controlium/framework's own doc comment
@@ -123,16 +178,20 @@ export function wireCucumberHooks(cucumber: CucumberHookAPI): void {
   // resolve correctly once Settings' context is actually bound to this test's World/parameters.
   cucumber.Before({ name: 'Controlium framework: Cucumber logging callback & settings context' }, async function (this: IWorld) {
     Logger.logOutputCallback = buildAttachCallback(this);
-    Logger.writeLine(LogLevels.TestInformation,'Started test.\n - Wired Framework logger output to Cucumber world.attach');
+    Logger.writeLine(LogLevels.TestInformation, 'Started test.\n - Wired Framework logger output to Cucumber world.attach');
     // `this.parameters` — NOT `this` — is the object `profileParameterName` JSONPaths (e.g.
-    // API_AUTWrapper.loadSettings's `$.testAUTDetails.<appName>.port`) actually need to
+    // API_AUTWrapper.loadSettings's `$.testAUTs.<appName>.port`) actually need to
     // query: it's Cucumber's own worldParameters bag (from cucumber.js's `worldParameters`),
     // the thing a profile's settings actually land on. `this` itself is the World wrapper
     // (attach/log/link/parameters) — passing it directly would make every JSONPath miss,
-    // since `testAUTDetails` lives at `this.parameters.testAUTDetails`, not `this.testAUTDetails`.
+    // since `testAUTs` lives at `this.parameters.testAUTs`, not `this.testAUTs`.
     // Confirmed against Cucumber-JS's own `IWorld` shape directly — `worldParameters` always
     // lands under `.parameters`, never spread onto the World object itself.
     Settings.setContext({ sourceName: 'World', parameters: this.parameters });
+    //
+    // Detokeniser defaultr delimiter is '|'.  This wont work with Cucumber due to | being used as
+    // a column delimiter in a DataTable.  So change to ';'.
+    Detokeniser.delimiter = ';';
     await beforeTest();
   });
 

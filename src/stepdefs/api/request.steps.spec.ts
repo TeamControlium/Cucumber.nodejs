@@ -276,7 +276,7 @@ describe('wireApiRequestStepDefinitions', () => {
     }
 
     async function createStubAut(appName = 'AUT'): Promise<API_AUTWrapper> {
-      return API_AUTWrapper.create({
+      return API_AUTWrapper.startNewApplication({
         appName,
         port: 15991,
         bootstrapper: async () => ({}),
@@ -285,7 +285,7 @@ describe('wireApiRequestStepDefinitions', () => {
     }
 
     afterEach(async () => {
-      await API_AUTWrapper.closeAllRegistered();
+      await API_AUTWrapper.closeAllAUTsAndAPIs();
     });
 
     it('calls through with the given method and path', async () => {
@@ -343,7 +343,7 @@ describe('wireApiRequestStepDefinitions', () => {
     }
 
     async function createStubAut(appName = 'AUT'): Promise<API_AUTWrapper> {
-      return API_AUTWrapper.create({
+      return API_AUTWrapper.startNewApplication({
         appName,
         port: 15993,
         bootstrapper: async () => ({}),
@@ -352,7 +352,7 @@ describe('wireApiRequestStepDefinitions', () => {
     }
 
     afterEach(async () => {
-      await API_AUTWrapper.closeAllRegistered();
+      await API_AUTWrapper.closeAllAUTsAndAPIs();
     });
 
     it('"data" sends the literal text verbatim, with no structural interpretation', async () => {
@@ -409,7 +409,7 @@ describe('wireApiRequestStepDefinitions', () => {
     }
 
     async function createStubAut(appName = 'AUT'): Promise<API_AUTWrapper> {
-      return API_AUTWrapper.create({
+      return API_AUTWrapper.startNewApplication({
         appName,
         port: 15995,
         bootstrapper: async () => ({}),
@@ -418,7 +418,7 @@ describe('wireApiRequestStepDefinitions', () => {
     }
 
     afterEach(async () => {
-      await API_AUTWrapper.closeAllRegistered();
+      await API_AUTWrapper.closeAllAUTsAndAPIs();
     });
 
     it('no line-ending clause — sends the DocString content with Gherkin\'s own "\\n" untouched', async () => {
@@ -569,7 +569,7 @@ describe('wireApiRequestStepDefinitions', () => {
     }
 
     async function createStubAut(appName = 'AUT'): Promise<API_AUTWrapper> {
-      return API_AUTWrapper.create({
+      return API_AUTWrapper.startNewApplication({
         appName,
         port: 15994,
         bootstrapper: async () => ({}),
@@ -578,7 +578,7 @@ describe('wireApiRequestStepDefinitions', () => {
     }
 
     afterEach(async () => {
-      await API_AUTWrapper.closeAllRegistered();
+      await API_AUTWrapper.closeAllAUTsAndAPIs();
     });
 
     it('"body" rejects a DataTable — mutating opaque text is a contradiction', async () => {
@@ -639,7 +639,7 @@ describe('wireApiRequestStepDefinitions', () => {
     }
 
     async function createStubAut(appName = 'AUT'): Promise<API_AUTWrapper> {
-      return API_AUTWrapper.create({
+      return API_AUTWrapper.startNewApplication({
         appName,
         port: 15996,
         bootstrapper: async () => ({}),
@@ -648,7 +648,7 @@ describe('wireApiRequestStepDefinitions', () => {
     }
 
     afterEach(async () => {
-      await API_AUTWrapper.closeAllRegistered();
+      await API_AUTWrapper.closeAllAUTsAndAPIs();
     });
 
     describe('no DataTable (pattern [4])', () => {
@@ -810,9 +810,9 @@ describe('wireApiRequestStepDefinitions', () => {
     async function createStubAut(appName = 'AUT'): Promise<API_AUTWrapper> {
       Settings.setContext({
         sourceName: 'TestProfile',
-        parameters: { testAUTDetails: { [appName]: { resourcePathPreambles: { V1: '/api/v1', V2: '/api/v2' } } } },
+        parameters: { testAUTs: { [appName]: { resourcePathPreambles: { V1: '/api/v1', V2: '/api/v2' } } } },
       });
-      const aut = await API_AUTWrapper.create({
+      const aut = await API_AUTWrapper.startNewApplication({
         appName,
         port: 15992,
         bootstrapper: async () => ({}),
@@ -824,7 +824,7 @@ describe('wireApiRequestStepDefinitions', () => {
 
     afterEach(async () => {
       Settings.clearContext();
-      await API_AUTWrapper.closeAllRegistered();
+      await API_AUTWrapper.closeAllAUTsAndAPIs();
     });
 
     it('switches the preamble on the resolved AUT', async () => {

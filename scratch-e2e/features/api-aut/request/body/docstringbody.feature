@@ -1,4 +1,4 @@
-@full
+@full @api @request @body
 Feature: Scratch example — DocString body requests, every structural combination
 
   Exercises:

@@ -7,6 +7,7 @@ function makeFakeCucumber() {
   return {
     BeforeAll: vi.fn(),
     Before: vi.fn(),
+    BeforeStep: vi.fn(),
     After: vi.fn(),
     AfterAll: vi.fn(),
   };
@@ -73,12 +74,70 @@ describe('wireCucumberHooks', () => {
     expect(cucumber.After.mock.calls[0][0]).toEqual(expect.objectContaining({ name: expect.any(String) }));
   });
 
+  // BeforeStep's own guard runs independently of any step definition's own handler — see
+  // guardStepDataTableExistance's own doc comment in index.ts for why
+  // this has to be a BeforeStep hook rather than a check inside a handler's own body.
+  describe('BeforeStep: a ";"-terminated step must have an attached DataTable', () => {
+
+    it('registers exactly one BeforeStep handler', () => {
+      const cucumber = makeFakeCucumber();
+      wireCucumberHooks(cucumber);
+      expect(cucumber.BeforeStep).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not throw for a step whose text does not end in ";"', () => {
+      const cucumber = makeFakeCucumber();
+      wireCucumberHooks(cucumber);
+      const guard = cucumber.BeforeStep.mock.calls[0][0] as (arg: unknown) => void;
+
+      expect(() => guard({ pickleStep: { text: "a 'POST' request to AUT path '/users'" } })).not.toThrow();
+    });
+
+    it('does not throw for a ";"-terminated step with a real DataTable attached', () => {
+      const cucumber = makeFakeCucumber();
+      wireCucumberHooks(cucumber);
+      const guard = cucumber.BeforeStep.mock.calls[0][0] as (arg: unknown) => void;
+
+      expect(() =>
+        guard({ pickleStep: { text: "a 'POST' request to AUT path '/users', [json] body '{}';", argument: { dataTable: { rows: [] } } } })
+      ).not.toThrow();
+    });
+
+    it('throws a clear, tester-facing error for a ";"-terminated step with no argument at all', () => {
+      const cucumber = makeFakeCucumber();
+      wireCucumberHooks(cucumber);
+      const guard = cucumber.BeforeStep.mock.calls[0][0] as (arg: unknown) => void;
+
+      expect(() => guard({ pickleStep: { text: "a 'POST' request to AUT path '/users', body 'plain text';" } })).toThrow(
+        /Step terminated with \[;\] but has no Data Table/
+      );
+    });
+
+    it('throws for a ";"-terminated step whose argument is a DocString, not a DataTable', () => {
+      const cucumber = makeFakeCucumber();
+      wireCucumberHooks(cucumber);
+      const guard = cucumber.BeforeStep.mock.calls[0][0] as (arg: unknown) => void;
+
+      expect(() => guard({ pickleStep: { text: "a 'POST' request to AUT path '/users', body;", argument: { docString: { content: '{}' } } } })).toThrow(
+        /Step terminated with \[;\] but has no Data Table/
+      );
+    });
+
+    it('includes the step text itself in the error, so the tester can find the mismatched line', () => {
+      const cucumber = makeFakeCucumber();
+      wireCucumberHooks(cucumber);
+      const guard = cucumber.BeforeStep.mock.calls[0][0] as (arg: unknown) => void;
+
+      expect(() => guard({ pickleStep: { text: "a distinctive step text;" } })).toThrow(/a distinctive step text;/);
+    });
+  });
+
   it('sets the Settings context from the Cucumber World\'s own parameters (worldParameters), not the World wrapper itself', async () => {
     const cucumber = makeFakeCucumber();
     const setContextSpy = vi.spyOn(Settings, 'setContext').mockImplementation(() => undefined);
     // Shaped like a real Cucumber IWorld: worldParameters land under `.parameters`, not
     // spread onto the World object directly — see @cucumber/cucumber's own World class.
-    const fakeWorldParameters = { testAUTDetails: { SomeApp: { port: 1234 } } };
+    const fakeWorldParameters = { testAUTs: { SomeApp: { port: 1234 } } };
     const fakeWorld = { attach: vi.fn(), log: vi.fn(), link: vi.fn(), parameters: fakeWorldParameters };
 
     wireCucumberHooks(cucumber);

@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 scratch-e2e/results/
+.claude/
 *.log
 .env
-.claude/
+CLAUDE.*

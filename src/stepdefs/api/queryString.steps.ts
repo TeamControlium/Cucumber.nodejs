@@ -2,7 +2,7 @@ import type { DataTable, Given as CucumberGiven, When as CucumberWhen } from '@c
 import { API_AUTWrapper } from '@controlium/framework';
 import { APIUtils, JsonUtils, Log, LogLevels, Utils, ValueExpression } from '@controlium/utils';
 
-import { getDataTableRows } from '../../dataTable/cucumberDataTable.js';
+import { resolveDataTableRows } from '../../dataTable/cucumberDataTable.js';
 
 /**
  * The slice of `@cucumber/cucumber` `wireApiQueryStringStepDefinitions` needs.
@@ -28,7 +28,7 @@ function resolveMode(mode: string | undefined): 'replaced' | 'merged' {
  */
 async function resolveDataTableOverrideQueryParams(dataTable: DataTable | undefined): Promise<Record<string, unknown>> {
   if (Utils.isUndefined(dataTable)) return {};
-  const rows = getDataTableRows(dataTable, ['Query Param', 'Value']);
+  const rows = await resolveDataTableRows(dataTable, ['Query Param', 'Value']);
   const rawQueryParams = JsonUtils.buildObjectFromRows(rows, 'Query Param', 'Value');
   const resolvedEntries = await Promise.all(
     Object.entries(rawQueryParams).map(async ([key, value]) => [key, await ValueExpression.parse(value, { useJson5: true })] as const)
@@ -37,19 +37,20 @@ async function resolveDataTableOverrideQueryParams(dataTable: DataTable | undefi
 }
 
 /**
- * Extracts a query-param-configuration DataTable's raw `Value` column text, **unresolved**
- * — used only by the one-shot "next request" overrides further down, which must defer
- * `ValueExpression.parse`'s own detokenisation (and casting) to the moment
- * `API_AUTWrapper.request()` actually consumes the override, rather than resolving it here,
- * eagerly, at step-definition time — exact mirror of `headers.steps.ts`'s own
- * `extractNextRequestDataTableHeaderExpressions` (see its own doc comment for the full
- * reasoning, not repeated here). The session-level patterns above still resolve immediately
- * via {@link resolveDataTableOverrideQueryParams} — only the one-shot override defers.
+ * Extracts a query-param-configuration DataTable's raw `Value` column text — used only by
+ * the one-shot "next request" overrides further down, which still defer
+ * `ValueExpression.parse`'s own casting to the moment `API_AUTWrapper.request()` actually
+ * consumes the override, rather than resolving it here, eagerly, at step-definition time —
+ * exact mirror of `headers.steps.ts`'s own `extractNextRequestDataTableHeaderExpressions`
+ * (see its own doc comment for the full reasoning, not repeated here). The session-level
+ * patterns above still resolve immediately via {@link resolveDataTableOverrideQueryParams} —
+ * only the one-shot override's *cast* defers.
+ *
  * Returns `undefined` when no DataTable was attached.
  */
-function extractNextRequestDataTableQueryParamExpressions(dataTable: DataTable | undefined): Record<string, string> | undefined {
+async function extractNextRequestDataTableQueryParamExpressions(dataTable: DataTable | undefined): Promise<Record<string, string> | undefined> {
   if (Utils.isUndefined(dataTable)) return undefined;
-  const rows = getDataTableRows(dataTable, ['Query Param', 'Value']);
+  const rows = await resolveDataTableRows(dataTable, ['Query Param', 'Value']);
   return JsonUtils.buildObjectFromRows(rows, 'Query Param', 'Value');
 }
 
@@ -74,8 +75,9 @@ async function applyQueryParams(aut: API_AUTWrapper, mode: 'replaced' | 'merged'
  * Stages a resolved query-params object as the static one-shot "next request" override, via
  * `API_AUTWrapper.setNextRequestQueryParams`/`mergeNextRequestQueryParams` depending on
  * `mode` — no `aut` argument, since the override is genuinely global (see this file's own
- * class doc, "Next request only" section). Synchronous — staging never detokenises;
- * `request()` itself does that lazily when it actually consumes the override.
+ * class doc, "Next request only" section). Synchronous — nothing about staging is async;
+ * the only deferred part is `dataTableValueExpressions`'s own `ValueExpression.parse` cast,
+ * resolved lazily when `request()` actually consumes the override.
  *
  * `queryParams` — the literal/file-sourced portion — is validated here, since its shape is
  * already fully known. `dataTableValueExpressions`, if any, stays raw and unvalidated —
@@ -179,7 +181,7 @@ export function wireApiQueryStringStepDefinitions(cucumber: CucumberGivenWhenAPI
    * Given request query params for [MyApp] are [merged] with "{'page': 2}"
    * Given request query params for AUT are '{"name": "blahblah"}'
    */
-  Given(/^request query params for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)")$/, async function (
+  Given(/^request query params for (AUT|API|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)")$/, async function (
       requestTarget: string,
       modeCapture: string | undefined,
       queryParamsDataSingleQuoted: string | undefined,
@@ -189,7 +191,7 @@ export function wireApiQueryStringStepDefinitions(cucumber: CucumberGivenWhenAPI
       const queryParamsData = queryParamsDataSingleQuoted ?? queryParamsDataDoubleQuoted as string;
       Log.writeLine(LogLevels.TestInformation, `STEP request query params for ${requestTarget} are [${mode}] with [${queryParamsData}]`);
 
-      const aut = API_AUTWrapper.resolveTarget(requestTarget);
+      const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
 
       const literalQueryParams = JsonUtils.parseObjectLiteral(
         queryParamsData,
@@ -211,7 +213,7 @@ export function wireApiQueryStringStepDefinitions(cucumber: CucumberGivenWhenAPI
    *   | Query Param | Value |
    *   | page        | number:2 |
    */
-  Given(/^request query params for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)");$/, async function (
+  Given(/^request query params for (AUT|API|\[.*\]) are (?:\[(replaced|merged)\] with )?(?:'(.*)'|"(.*)");$/, async function (
       requestTarget: string,
       modeCapture: string | undefined,
       queryParamsDataSingleQuoted: string | undefined,
@@ -222,7 +224,7 @@ export function wireApiQueryStringStepDefinitions(cucumber: CucumberGivenWhenAPI
       const queryParamsData = queryParamsDataSingleQuoted ?? queryParamsDataDoubleQuoted as string;
       Log.writeLine(LogLevels.TestInformation, `STEP request query params for ${requestTarget} are [${mode}] with [${queryParamsData}] (+ DataTable)`);
 
-      const aut = API_AUTWrapper.resolveTarget(requestTarget);
+      const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
 
       const literalQueryParams = JsonUtils.parseObjectLiteral(
         queryParamsData,
@@ -244,11 +246,11 @@ export function wireApiQueryStringStepDefinitions(cucumber: CucumberGivenWhenAPI
    * @example
    * Given request query params for AUT are [replaced] using test data file [query/search.json]
    */
-  Given(/^request query params for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\]$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string) {
+  Given(/^request query params for (AUT|API|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\]$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string) {
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP request query params for ${requestTarget} are [${mode}] using test data file [${filename}]`);
 
-      const aut = API_AUTWrapper.resolveTarget(requestTarget);
+      const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
       const fileQueryParams = await resolveQueryParamsFromTestDataFile(filename);
 
       await applyQueryParams(aut, mode, fileQueryParams);
@@ -265,11 +267,11 @@ export function wireApiQueryStringStepDefinitions(cucumber: CucumberGivenWhenAPI
    *   | Query Param | Value |
    *   | page        | 3     |
    */
-  Given(/^request query params for (AUT|EndPoint|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\];$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string, dataTable: DataTable) {
+  Given(/^request query params for (AUT|API|\[.*\]) are (?:\[(replaced|merged)\] )?using test data file \[(.*)\];$/, async function (requestTarget: string, modeCapture: string | undefined, filename: string, dataTable: DataTable) {
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP request query params for ${requestTarget} are [${mode}] using test data file [${filename}] (+ DataTable)`);
 
-      const aut = API_AUTWrapper.resolveTarget(requestTarget);
+      const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
       const fileQueryParams = await resolveQueryParamsFromTestDataFile(filename);
 
       const dataTableQueryParams = await resolveDataTableOverrideQueryParams(dataTable);
@@ -291,11 +293,11 @@ export function wireApiQueryStringStepDefinitions(cucumber: CucumberGivenWhenAPI
    *   | name        | blahblah     |
    *   | page        | number:2     |
    */
-  Given(/^request query params for (AUT|EndPoint|\[.*\]) are(?: \[(replaced|merged)\] with)?;$/, async function (requestTarget: string, modeCapture: string | undefined, dataTable: DataTable) {
+  Given(/^request query params for (AUT|API|\[.*\]) are(?: \[(replaced|merged)\] with)?;$/, async function (requestTarget: string, modeCapture: string | undefined, dataTable: DataTable) {
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP request query params for ${requestTarget} are [${mode}]`);
 
-      const aut = API_AUTWrapper.resolveTarget(requestTarget);
+      const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
       const queryParams = await resolveDataTableOverrideQueryParams(dataTable);
       await applyQueryParams(aut, mode, queryParams);
     }
@@ -353,7 +355,7 @@ export function wireApiQueryStringStepDefinitions(cucumber: CucumberGivenWhenAPI
         true
       );
 
-      const dataTableValueExpressions = extractNextRequestDataTableQueryParamExpressions(dataTable);
+      const dataTableValueExpressions = await extractNextRequestDataTableQueryParamExpressions(dataTable);
 
       applyNextRequestQueryParams(mode, literalQueryParams, dataTableValueExpressions);
     }
@@ -390,7 +392,7 @@ export function wireApiQueryStringStepDefinitions(cucumber: CucumberGivenWhenAPI
       Log.writeLine(LogLevels.TestInformation, `STEP next API request query params are [${mode}] using test data file [${filename}] (+ DataTable)`);
 
       const fileQueryParams = await resolveQueryParamsFromTestDataFile(filename);
-      const dataTableValueExpressions = extractNextRequestDataTableQueryParamExpressions(dataTable);
+      const dataTableValueExpressions = await extractNextRequestDataTableQueryParamExpressions(dataTable);
 
       applyNextRequestQueryParams(mode, fileQueryParams, dataTableValueExpressions);
     }
@@ -412,7 +414,7 @@ export function wireApiQueryStringStepDefinitions(cucumber: CucumberGivenWhenAPI
       const mode = resolveMode(modeCapture);
       Log.writeLine(LogLevels.TestInformation, `STEP next API request query params are [${mode}]`);
 
-      const dataTableValueExpressions = extractNextRequestDataTableQueryParamExpressions(dataTable);
+      const dataTableValueExpressions = await extractNextRequestDataTableQueryParamExpressions(dataTable);
       applyNextRequestQueryParams(mode, {}, dataTableValueExpressions);
     }
   );

@@ -23,6 +23,10 @@ export function startTargetApp(port) {
         handleMyBody(req, res);
         return;
       }
+      if (req.url.startsWith('/echo')) {
+        handleEcho(req, res);
+        return;
+      }
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'not found' }));
     });
@@ -74,6 +78,91 @@ function handleMyBody(req, res) {
     const body = Buffer.concat(chunks);
     res.writeHead(200, { 'Content-Type': req.headers['content-type'] ?? 'text/plain' });
     res.end(body);
+  });
+  req.on('error', (err) => {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: err.message }));
+  });
+}
+
+/**
+ * `req.headers` comma-joins a repeated header into one string (e.g. two `wibble:` lines
+ * become `'aa, b,b'`) — lossy the moment any value itself contains a comma, since there's
+ * then no way to tell "two values, one with a comma in it" apart from "one value with two
+ * commas". Rebuilding from `req.rawHeaders` (the flat, unfolded `[name, value, name,
+ * value, ...]` list) instead keeps each repeated header as a genuinely separate array
+ * entry, with no joining at all — the only representation that round-trips a case like
+ * `wibble: ['aa', 'b,b']` without corrupting it.
+ */
+function foldRawHeaders(rawHeaders) {
+  const headers = {};
+  for (let i = 0; i < rawHeaders.length; i += 2) {
+    const name = rawHeaders[i].toLowerCase();
+    const value = rawHeaders[i + 1];
+    if (!(name in headers)) {
+      headers[name] = value;
+    } else if (Array.isArray(headers[name])) {
+      headers[name].push(value);
+    } else {
+      headers[name] = [headers[name], value];
+    }
+  }
+  return headers;
+}
+
+/**
+ * Headers that must never be blindly reflected back as *real* response headers — not
+ * because an AUT couldn't legitimately set them, but because these specifically control
+ * HTTP framing/connection handling, and copying the request's version of them onto the
+ * response (rather than letting Node manage them) risks producing a response the HTTP
+ * client can't even parse. `host` is included too — a request-only header that is never
+ * meaningful as a response header. Everything else, however unusual (`wibble`, arbitrary
+ * casing, repeated headers), is reflected as-is — this app's whole job is to let a test
+ * configure response headers into *any* shape an AUT might produce, including shapes that
+ * aren't on this list.
+ */
+const UNSAFE_TO_REFLECT_AS_RESPONSE_HEADERS = new Set([
+  'host',
+  'content-length',
+  'transfer-encoding',
+  'connection',
+  'keep-alive',
+  'te',
+  'trailer',
+  'trailers',
+  'upgrade',
+  'proxy-authenticate',
+  'proxy-authorization',
+]);
+
+/**
+ * `/echo` — echoes the request's headers back as genuine HTTP response headers (so a test
+ * can verify the framework's own response-header validation against whatever header shape
+ * an AUT might set — repeated headers, unusual names, etc.), via `res.setHeader`, which
+ * accepts {@link foldRawHeaders}'s own array values (used instead of `req.headers` — see
+ * its own doc comment for why) to set multiple header lines of the same name, exactly
+ * reproducing the request's own repeats. The same headers are also included in the JSON
+ * response body, alongside the request body, purely for convenience (asserting on headers
+ * *and* body together via JSONPath into one response, without a second round-trip) — the
+ * response headers themselves are the actual point of this route. `Content-Type:
+ * application/json` is forced via `writeHead`'s own headers argument, which Node gives
+ * precedence over anything already set with `setHeader` — so a reflected request
+ * `Content-Type` never clobbers it. The body is decoded as UTF-8 text (never binary-safe) —
+ * fine for this app's own JSON/XML/text examples, not a general echo-anything-back
+ * guarantee.
+ */
+function handleEcho(req, res) {
+  const chunks = [];
+  req.on('data', (chunk) => chunks.push(chunk));
+  req.on('end', () => {
+    const body = Buffer.concat(chunks).toString('utf8');
+    const headers = foldRawHeaders(req.rawHeaders);
+    for (const [name, value] of Object.entries(headers)) {
+      if (UNSAFE_TO_REFLECT_AS_RESPONSE_HEADERS.has(name)) continue;
+      res.setHeader(name, value);
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ headers, body }));
   });
   req.on('error', (err) => {
     res.writeHead(500, { 'Content-Type': 'application/json' });

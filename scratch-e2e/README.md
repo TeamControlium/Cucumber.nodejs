@@ -26,20 +26,26 @@ scratch-e2e/
 ├── steps/
 │   └── example.steps.js
 └── features/
-    └── api-aut/
-        ├── request/        # request.steps.ts's own patterns — one file per body/kind
-        │   ├── nobody.feature
-        │   ├── literalbody.feature
-        │   ├── literalbodydatatable.feature
-        │   ├── docstringbody.feature
-        │   ├── filebody.feature
-        │   ├── filebodydatatable.feature
-        │   ├── databuiltbody.feature
-        │   └── resourcepathpreamble.feature
-        ├── headers/
-        │   └── headersquoting.feature
-        └── queryparams/
-            └── queryparams.feature
+    ├── api-aut/
+    │   ├── request/        # request.steps.ts's own patterns — one file per body/kind
+    │   │   ├── nobody.feature
+    │   │   ├── literalbody.feature
+    │   │   ├── literalbodydatatable.feature
+    │   │   ├── docstringbody.feature
+    │   │   ├── filebody.feature
+    │   │   ├── filebodydatatable.feature
+    │   │   ├── databuiltbody.feature
+    │   │   └── resourcepathpreamble.feature
+    │   ├── headers/
+    │   │   └── headersquoting.feature
+    │   └── queryparams/
+    │       └── queryparams.feature
+    └── api-endpoint/
+        └── request/
+            └── endpointrequests.feature   # API/[name] targeting against a real,
+                                            # non-AUT API (Postman Echo) — see
+                                            # registerAPI()/prepareAPI()/
+                                            # findAUTOrAPIByTargetText() in @controlium/framework
 ```
 
 Every Feature file is tagged `@full` (the structural/boundary sweep for that step pattern);
@@ -57,6 +63,17 @@ npm run test:scratch-e2e
 
 (`npm run build` first — `hooks.js` imports this package's own compiled `dist/esm/index.js`,
 same as `e2e-smoke` does.)
+
+## Requires internet access
+
+`features/api-endpoint/` is the one exception to "everything here is local/offline" —
+it exercises `API_AUTWrapper.registerAPI()`/`prepareAPI()`/`findAUTOrAPIByTargetText()`
+(the non-AUT "API" target, for addressing something that isn't an AUT under test)
+against a real, public, third-party service — Postman Echo
+(https://www.postman.com/postman/published-postman-templates/documentation/ae2ja6x/postman-echo),
+not a local stub. If this machine has no internet access, or postman-echo.com is
+unreachable, only that one feature file's scenarios fail — nothing else in this suite
+depends on it.
 
 ## Known issues
 

@@ -1,4 +1,4 @@
-@full
+@full @api @request @body
 Feature: Scratch example — test-data-file body requests, every structural combination
 
   Exercises:
@@ -60,9 +60,9 @@ Feature: Scratch example — test-data-file body requests, every structural comb
     literal "/", immediately precedes the opening "[[") — Detokeniser's own escape
     character is "/", a known, separately-tracked collision with URL/file paths, not
     something this scratch example exists to probe.
-    When a 'POST' request to AUT path '/my-body', [json] file [[[setting|processEnvName: "SCRATCH_E2E_FILEBODY_TOKEN_NOT_SET", defaultValue: "request-body/base"]].json]
+    When a 'POST' request to AUT path '/my-body', [json] file [[[setting;processEnvName: "SCRATCH_E2E_FILEBODY_TOKEN_NOT_SET", defaultValue: "request-body/base"]].json]
 
-  
+
   Scenario Outline: file body (<Logging Level>) — <bodyKind> file [<filename>]
     Excersize every logging level against a representative json/bin file-sourced body —
     bin specifically, since byte-exact content is the one case most likely to interact
@@ -79,3 +79,7 @@ Feature: Scratch example — test-data-file body requests, every structural comb
       | Framework Information | bin      | request-body/base.bin  |
       | Framework Debug       | json     | request-body/base.json |
       | Framework Debug       | bin      | request-body/base.bin  |
+
+  Scenario: a DataTable attached to a "bin" file body is rejected — raw bytes have no structure to mutate
+    Post a binary file
+    When a 'POST' request to AUT path '/my-body', [bin] file [request-body/base.bin]

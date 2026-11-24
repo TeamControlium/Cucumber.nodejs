@@ -3,6 +3,7 @@ import { wireApiHeaderStepDefinitions } from './headers.steps.js';
 import { wireApiQueryStringStepDefinitions } from './queryString.steps.js';
 import { wireApiRequestStepDefinitions } from './request.steps.js';
 import { wireApiValidationStepDefinitions } from './validation.steps.js';
+import { wireApiHeaderValidationStepDefinitions } from './headerValidation.steps.js';
 
 export { wireApiLaunchStepDefinitions } from './launch.steps.js';
 export type { CucumberGivenThenAPI } from './launch.steps.js';
@@ -19,6 +20,9 @@ export type { CucumberGivenWhenAPI as CucumberRequestGivenWhenAPI } from './requ
 export { wireApiValidationStepDefinitions } from './validation.steps.js';
 export type { CucumberThenAPI } from './validation.steps.js';
 
+export { wireApiHeaderValidationStepDefinitions } from './headerValidation.steps.js';
+export type { CucumberThenAPI as CucumberHeaderValidationThenAPI } from './headerValidation.steps.js';
+
 /**
  * The slice of `@cucumber/cucumber` `wireApiStepDefinitions` needs — the union of every
  * `api/` file's own narrower requirement.
@@ -31,9 +35,10 @@ export interface CucumberGivenWhenThenAPI {
 
 /**
  * Registers every `api` step definition — launch, header configuration, query-param
- * configuration, request execution, response validation — for a local API-based (or
- * non-interfacing, e.g. file-processing) AUT. Sugar over calling each file's own
- * `wireXStepDefinitions` individually; see `docs/design/step-definition-structure.md`.
+ * configuration, request execution, response validation (status/body and, separately,
+ * headers) — for a local API-based (or non-interfacing, e.g. file-processing) AUT. Sugar
+ * over calling each file's own `wireXStepDefinitions` individually; see
+ * `docs/design/step-definition-structure.md`.
  */
 export function wireApiStepDefinitions(cucumber: CucumberGivenWhenThenAPI): void {
   wireApiLaunchStepDefinitions(cucumber);
@@ -41,4 +46,5 @@ export function wireApiStepDefinitions(cucumber: CucumberGivenWhenThenAPI): void
   wireApiQueryStringStepDefinitions(cucumber);
   wireApiRequestStepDefinitions(cucumber);
   wireApiValidationStepDefinitions(cucumber);
+  wireApiHeaderValidationStepDefinitions(cucumber);
 }

@@ -1,8 +1,8 @@
 import type { DataTable, Given as CucumberGiven, When as CucumberWhen } from '@cucumber/cucumber';
 import { API_AUTWrapper } from '@controlium/framework';
-import { APIUtils, Log, LogLevels, StringUtils, Utils, ValueExpression } from '@controlium/utils';
+import { APIUtils, Log, Logger, LogLevels, StringUtils, Utils, ValueExpression } from '@controlium/utils';
 
-import { getDataTableRows } from '../../dataTable/cucumberDataTable.js';
+import { resolveDataTableRows } from '../../dataTable/cucumberDataTable.js';
 
 /**
  * The slice of `@cucumber/cucumber` `wireApiRequestStepDefinitions` needs.
@@ -14,20 +14,22 @@ export interface CucumberGivenWhenAPI {
 
 /**
  * Converts a DataTable's path-override rows (`JSON-Path`/`XPath` | `Value` columns) into the
- * plain, runner-agnostic shape {@link APIUtils.resolveLiteralRequestBody} takes — the
- * DataTable→rows extraction is the only Cucumber-specific part; the actual value resolution
- * (each cell's `Value` cast via `ValueExpression.parse`'s source×cast grammar, so `file:`/
- * `number:`/`boolean:`/`json:` all work here too) is delegated to
- * {@link APIUtils.resolveRequestBodyModifications} — the same, runner-agnostic function any
- * other test runner's own equivalent would call with its own already-resolved `{ path, value
- * }[]` list.
+ * plain, runner-agnostic shape {@link APIUtils.resolveLiteralRequestBody} takes. The
+ * DataTable→rows extraction via `resolveDataTableRows` (quote-stripping each cell, nothing
+ * else) is the only Cucumber-specific part; the actual value resolution — each cell's `Value`
+ * cast via `ValueExpression.parse`'s source×cast grammar, so `file:`/`number:`/`boolean:`/
+ * `json:` all work here too — is delegated to {@link APIUtils.resolveRequestBodyModifications},
+ * the same, runner-agnostic function any other test runner's own equivalent would call with its
+ * own already-resolved `{ path, value }[]` list. No token (`[[...]]`) resolution happens
+ * anywhere in this path — a cell written as `[[random|digits|2]]` reaches
+ * `ValueExpression.parse` as that literal text and is cast or passed through unresolved.
  */
 async function resolveModifications(
   pathColumnName: 'JSON-Path' | 'XPath',
   dataTable: DataTable | undefined
 ): Promise<APIUtils.RequestBodyModification[] | undefined> {
   if (Utils.isUndefined(dataTable)) return undefined;
-  const rows = getDataTableRows(dataTable, [pathColumnName, 'Value']);
+  const rows = await resolveDataTableRows(dataTable, [pathColumnName, 'Value']);
   return APIUtils.resolveRequestBodyModifications(rows.map((row) => ({ path: row[pathColumnName], value: row.Value })));
 }
 
@@ -35,10 +37,11 @@ async function resolveModifications(
  * Resolves a literal request body of the given kind to the final string
  * {@link API_AUTWrapper.request} takes, plus the `Content-Type` that body's kind implies.
  * The DataTable→modifications conversion (and the per-kind `JSON-Path`/`XPath` column
- * choice) is the only Cucumber-specific part; the actual parse/mutate/detokenise/serialise/
- * Content-Type work is {@link APIUtils.resolveLiteralRequestBody}'s own job — the same,
- * runner-agnostic function any other test runner's own equivalent would call directly with
- * its own already-resolved modifications array.
+ * choice) is the only Cucumber-specific part; the parse/mutate/serialise/Content-Type work
+ * is {@link APIUtils.resolveLiteralRequestBody}'s own job — the same, runner-agnostic
+ * function any other test runner's own equivalent would call directly with its own
+ * already-resolved modifications array. No token (`[[...]]`) resolution happens on this
+ * path — the returned `body` carries any token text a test author wrote exactly as written.
  *
  * `body` is opaque text, never mutable — a DataTable attached to it is a contradiction,
  * caught here before `APIUtils.resolveLiteralRequestBody` even runs (that function's own
@@ -55,6 +58,7 @@ async function resolveLiteralRequestBody(
   literalBody: string,
   dataTable: DataTable | undefined
 ): Promise<{ body: string; contentType: string | undefined }> {
+  Logger.writeLine(LogLevels.FrameworkDebug,`Body kind [${bodyKind??'<Undefined>'}]: ${StringUtils.truncateIfNeeded(StringUtils.cleanControlChars(literalBody),64)}`);
   if ((bodyKind ?? 'text') === 'text') {
     if (!Utils.isUndefined(dataTable)) {
       throw new Error(
@@ -74,12 +78,13 @@ async function resolveLiteralRequestBody(
  * Resolves a test-data-file-sourced request body — the one point where the `bin` kind forks
  * away entirely from {@link resolveLiteralRequestBody}'s text-based path: `bin` loads raw
  * bytes via {@link APIUtils.resolveBinaryFileRequestBody} (no `ValueExpression.parse`, no
- * text decoding, no trimming, no DataTable), while every other kind still goes through
- * `ValueExpression.parse`'s plain `file:` source (detokenised path, then content, same as
- * every other file-sourced value in this package) and on into
- * {@link resolveLiteralRequestBody} exactly as before. Shared by both file-sourced step
- * registrations below (with vs. without a trailing DataTable) so this fork lives in exactly
- * one place.
+ * text decoding, no trimming, no DataTable — raw bytes have no text structure to mutate),
+ * while every other kind goes through `ValueExpression.parse`'s plain `file:` source (path
+ * resolution, then file content) and on into {@link resolveLiteralRequestBody} exactly as
+ * before. `filename` is used exactly as given — no token resolution on it, same as the file's
+ * own loaded content once it reaches `resolveLiteralRequestBody`. Shared by both file-sourced
+ * step registrations below (with vs. without a trailing DataTable) so this fork lives in
+ * exactly one place.
  *
  * @throws {Error} If a DataTable is attached to a `bin` file — raw bytes have no structure
  *   to mutate, same reasoning as `body` (opaque text) rejecting one.
@@ -107,8 +112,9 @@ async function resolveFileRequestBody(
  *
  * Same conventions as `headers.steps.ts` (see its own doc comment for the full reasoning,
  * not repeated here):
- * - No "detokenised" wording fork — detokenisation is unconditional, so there's no per-step
- *   choice to word a pattern around.
+ * - No token (`[[...]]`) resolution happens anywhere in this file — every pattern's body
+ *   (literal, DocString, or file-sourced) reaches `API_AUTWrapper.request()` exactly as the
+ *   test author wrote it, or exactly as loaded from the file.
  * - The literal-body pattern uses a trailing `;` to mean "a DataTable follows" — same
  *   convention the legacy framework used throughout its own step definitions (e.g.
  *   `APIAUT.steps.ts`'s header/body steps) — rather than one pattern with a genuinely
@@ -202,11 +208,11 @@ async function resolveFileRequestBody(
  *
  * Also registers one `Given` — selecting which of an AUT's settings-configured
  * `resourcePathPreambles` is in use for the rest of the session (see
- * `API_AUTWrapper.useResourcePathPreamble`'s own doc comment for the replace-not-accumulate
+ * `API_AUTWrapper.switchResourcePathPreamble`'s own doc comment for the replace-not-accumulate
  * semantics). Lives here, not in `launch.steps.ts`, since it's a request-routing concern —
  * which path every subsequent request actually goes to — not AUT lifecycle. Reset
  * automatically at the end of every test via `API_AUTWrapper.close()` (called by
- * `afterTest()`/`closeAllRegistered()`), same as session headers — never leaks into
+ * `afterTest()`/`closeAllAUTsAndAPIs()`), same as session headers — never leaks into
  * whichever test runs next.
  *
  * @param cucumber - The `@cucumber/cucumber` module itself, same convention as
@@ -238,17 +244,17 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
   /**
    * Selects which of an AUT's settings-configured `resourcePathPreambles` every
    * subsequent request on this AUT uses, via
-   * {@link API_AUTWrapper.useResourcePathPreamble} — replaces whatever preamble was
+   * {@link API_AUTWrapper.switchResourcePathPreamble} — replaces whatever preamble was
    * selected before, rather than accumulating. Reset automatically at the end of the test.
    *
    * @example
    * Given requests to AUT use resource path preamble [V2]
    * Given requests to [MyApp] use resource path preamble [V1]
    */
-  Given(/^requests to (AUT|EndPoint|\[[^[\]]*\]) use resource path preamble \[(.*)\]$/, function (requestTarget: string, name: string) {
+  Given(/^requests to (AUT|API|\[[^[\]]*\]) use resource path preamble \[(.*)\]$/, function (requestTarget: string, name: string) {
     Log.writeLine(LogLevels.TestInformation, `STEP ${requestTarget} uses resource path preamble [${name}]`);
-    const aut = API_AUTWrapper.resolveTarget(requestTarget);
-    aut.useResourcePathPreamble(name);
+    const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
+    aut.switchResourcePathPreamble(name);
   });
 
   /**
@@ -261,7 +267,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    * When a 'GET' request to AUT path '/users'
    * When a "DELETE" request to [MyApp] path '/users/42'
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)")$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|API|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)")$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -271,7 +277,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
     const method = methodSingleQuoted ?? methodDoubleQuoted as string;
     const resourcePath = pathSingleQuoted ?? pathDoubleQuoted as string;
     Log.writeLine(LogLevels.TestInformation, `STEP: [${method}] request to ${requestTarget} path [${resourcePath}]`);
-    const aut = API_AUTWrapper.resolveTarget(requestTarget);
+    const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
     await aut.request(method, resourcePath);
   }
   );
@@ -289,7 +295,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    * When a 'POST' request to AUT path '/users', [json] body '{"name": "Bob"}'
    * When a 'POST' request to AUT path '/users', [xml] body '<user><name>Bob</name></user>'
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text)\] )?body (?:'(.*)'|"(.*)")$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|API|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text)\] )?body (?:'(.*)'|"(.*)")$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -306,7 +312,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [${bodyKind ?? 'text'}] body '${requestBody}'`
     );
-    const aut = API_AUTWrapper.resolveTarget(requestTarget);
+    const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
     const { body, contentType } = await resolveLiteralRequestBody(bodyKind, requestBody, undefined);
     await aut.request(method, resourcePath, { body, contentType });
   }
@@ -328,7 +334,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    *   | XPath      | Value |
    *   | /user/role | admin |
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text)\] )?body (?:'(.*)'|"(.*)");$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|API|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text)\] )?body (?:'(.*)'|"(.*)");$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -346,7 +352,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [${bodyKind ?? 'text'}] body '${requestBody}'; (+ DataTable)`
     );
-    const aut = API_AUTWrapper.resolveTarget(requestTarget);
+    const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
     const { body, contentType } = await resolveLiteralRequestBody(bodyKind, requestBody, dataTable);
     await aut.request(method, resourcePath, { body, contentType });
   }
@@ -384,9 +390,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    * counts a blank line immediately before the closer as real trailing content, one `\n` per
    * blank line, confirmed empirically; there is no implicit extra terminator beyond that).
    *
-   * `<escaped>` uses `/` as its escape character (matching `Detokeniser`'s own choice, for a
-   * consistent mental model across this repo) — though this grammar is deliberately NOT
-   * routed through `Detokeniser` itself, to avoid entangling this with Detokeniser's own
+
    * escaping, which is separately flagged as needing a from-scratch redesign. See
    * {@link StringUtils.resolveLineEndingEscape} for the implementation (shared, runner-
    * agnostic — any other test runner's own equivalent needs the identical grammar); in
@@ -417,7 +421,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    *   line two
    *   """
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml)\] )?body(?: \((?:'(.*)'|"(.*)") line endings\))?:$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|API|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml)\] )?body(?: \((?:'(.*)'|"(.*)") line endings\))?:$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -437,7 +441,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [${bodyKind ?? 'text'}] body from DocString (${docStringContent.length} chars)`
     );
-    const aut = API_AUTWrapper.resolveTarget(requestTarget);
+    const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
     const { body, contentType } = await resolveLiteralRequestBody(bodyKind, requestBody, undefined);
     await aut.request(method, resourcePath, { body, contentType });
   }
@@ -449,9 +453,10 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    * parse/mutate/beautify/Content-Type handling as the quoted-literal and DocString
    * patterns above for `json`/`xml`/`yaml`/`text` ({@link resolveLiteralRequestBody}, via
    * {@link resolveFileRequestBody}), just sourced from a file instead of the step's own
-   * text — loaded via {@link ValueExpression.parse}'s plain `file:` source (the configured
-   * test-data root, detokenised path then content, same as every other file-sourced value
-   * in this package). `bin` forks away from all of that entirely — see
+   * text — loaded via {@link ValueExpression.parse}'s plain `file:` source (path resolved
+   * against the configured test-data root, then the file's content read, same as every other
+   * file-sourced value in this package; no token resolution on either). `bin` forks away from
+   * all of that entirely — see
    * {@link resolveFileRequestBody}'s own doc comment. No DataTable override — see the
    * trailing-`;` sibling registration below for that (see this function's own doc comment
    * for why these are two separate registrations rather than one with an optional
@@ -464,7 +469,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    * When a 'POST' request to AUT path '/users', file [users/rawBody.txt]
    * When a 'POST' request to AUT path '/upload', [bin] file [images/photo.png]
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml|bin)\] )?file \[(.*)\]$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|API|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml|bin)\] )?file \[(.*)\]$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -479,7 +484,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [${bodyKind ?? 'text'}] body from test data file [${filename}]`
     );
-    const aut = API_AUTWrapper.resolveTarget(requestTarget);
+    const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
     const { body, contentType } = await resolveFileRequestBody(bodyKind, filename, undefined);
     await aut.request(method, resourcePath, { body, contentType });
   }
@@ -499,7 +504,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    *   | JSON-Path | Value |
    *   | $.role    | admin |
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml|bin)\] )?file \[(.*)\];$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|API|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml|bin)\] )?file \[(.*)\];$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -515,7 +520,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [${bodyKind ?? 'text'}] body from test data file [${filename}]; (+ DataTable)`
     );
-    const aut = API_AUTWrapper.resolveTarget(requestTarget);
+    const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
     const { body, contentType } = await resolveFileRequestBody(bodyKind, filename, dataTable);
     await aut.request(method, resourcePath, { body, contentType });
   }
@@ -548,7 +553,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    *   | $.name    | Bob       |
    *   | $.age     | number:42 |
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|EndPoint|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), json body;$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|API|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), json body;$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -562,9 +567,8 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
       LogLevels.TestInformation,
       `STEP: [${method}] request to ${requestTarget} path [${resourcePath}], [json] body built entirely from DataTable`
     );
-    const aut = API_AUTWrapper.resolveTarget(requestTarget);
-    const modifications = await resolveModifications('JSON-Path', dataTable);
-    const { body, contentType } = await APIUtils.resolveLiteralRequestBody('json', '{}', modifications);
+    const aut = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
+    const { body, contentType } = await resolveLiteralRequestBody('json', '{}', dataTable);
     await aut.request(method, resourcePath, { body, contentType });
   }
   );

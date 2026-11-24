@@ -11,16 +11,16 @@ export default {
   // scratch-e2e/hooks/hooks.js's Before hook) resolves its config from here — Cucumber
   // copies worldParameters onto the World instance, and wireCucumberHooks's Settings
   // context bracketing (Settings.setContext({ parameters: this }) in Before) is what lets
-  // loadSettings() find `testAUTDetails['Scratch Target App'].*` on it.
+  // loadSettings() find `testAUTs['Scratch Target App'].*` on it.
   //
   // host/protocol/requestTimeout/autHandlerTimeout are stated explicitly below even though
   // they currently just restate API_AUTWrapper's own built-in defaults — this file is the
   // one place meant to show this AUT's actual intended configuration, same shape as a real
-  // suite's testAUTDetails block (see e.g. ea-eq-bff's own bffDetails.js); leaving them
+  // suite's testAUTs block (see e.g. ea-eq-bff's own bffDetails.js); leaving them
   // implicit means loadSettings()'s own per-field trail has nothing to resolve them from,
   // and just reports "not configured" for every one of them.
   worldParameters: {
-    testAUTDetails: {
+    testAUTs: {
       "Scratch Target App": {
         host: 'localhost',
         port: 3999,
@@ -37,6 +37,24 @@ export default {
           V1: '/my-body',
           V2: '/does-not-exist',
         },
+      },
+    },
+    // API-side counterpart to testAUTs above — resolved by
+    // API_AUTWrapper.prepareAPI('Postman Echo') (see hooks.js's Before hook). A real,
+    // public, third-party HTTP request-echoing service Postman itself publishes and
+    // maintains for exactly this purpose — see
+    // https://www.postman.com/postman/published-postman-templates/documentation/ae2ja6x/postman-echo
+    // — not a local stub: this is genuinely "an addressable target that is not an AUT
+    // under test", the case createAPI()/prepareAPI()/resolveTarget() exist for.
+    // No autHandlerTimeout field — an API is never bootstrapped by this process, so
+    // that setting has nothing to apply to (see API_AUTWrapper.loadSettings's own doc
+    // comment for the kind-based branching).
+    testAPIs: {
+      "Postman Echo": {
+        host: 'postman-echo.com',
+        port: 443,
+        protocol: 'https',
+        requestTimeout: 30_000,
       },
     },
   },
@@ -84,7 +102,7 @@ export const common = {
 
 };
 
-// Only `port` differs from `common`'s own testAUTDetails (3999, vs `debug`'s 3899) — kept
+// Only `port` differs from `common`'s own testAUTs (3999, vs `debug`'s 3899) — kept
 // here, not in `common`, so `full`/`debug` can target genuinely different ports and never
 // collide if a stray process from one mode is still listening while the other runs.
 // run-scratch-e2e.sh's `CUCUMBER_TAGS="@full or @Full"` is the actual tag filter — every
@@ -92,7 +110,7 @@ export const common = {
 // boundary sweep across every step pattern.
 export const full = {
   worldParameters: {
-    testAUTDetails: {
+    testAUTs: {
       "Scratch Target App": {
         host: 'localhost',
         port: 3999,
@@ -105,6 +123,23 @@ export const full = {
         },
       },
     },
+    // Same testAPIs block as the default export above — restated here (not left
+    // only in the default export) for the same reason testAUTs is restated per
+    // profile: Cucumber-JS's own `-p common -p full` merge replaces `worldParameters`
+    // wholesale per key, so anything full/debug needs has to be stated in full/debug
+    // themselves, not assumed to survive from elsewhere. Postman Echo's connection details
+    // don't actually differ between full/debug (it's a fixed external host, not a locally
+    // spun-up port), but the block still has to be present in whichever profile actually
+    // runs, or resolveTarget('API'/'[Postman Echo]') would have nothing registered to
+    // find.
+    testAPIs: {
+      "Postman Echo": {
+        host: 'postman-echo.com',
+        port: 443,
+        protocol: 'https',
+        requestTimeout: 30_000,
+      },
+    },
   },
 };
 
@@ -114,7 +149,7 @@ export const full = {
 // focused subset, not a duplicate of the full structural sweep.
 export const debug = {
   worldParameters: {
-    testAUTDetails: {
+    testAUTs: {
       "Scratch Target App": {
         host: 'localhost',
         port: 3899,
@@ -125,6 +160,15 @@ export const debug = {
           V1: '/my-body',
           V2: '/does-not-exist',
         },
+      },
+    },
+    // See `full`'s own comment above for why this is restated here too.
+    testAPIs: {
+      "Postman Echo": {
+        host: 'postman-echo.com',
+        port: 443,
+        protocol: 'https',
+        requestTimeout: 30_000,
       },
     },
   },

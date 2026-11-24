@@ -220,7 +220,7 @@ describe('wireApiHeaderStepDefinitions', () => {
     }
 
     async function createStubAut(appName = 'AUT'): Promise<API_AUTWrapper> {
-      return API_AUTWrapper.create({
+      return API_AUTWrapper.startNewApplication({
         appName,
         port: 15990,
         bootstrapper: async () => ({}),
@@ -229,7 +229,7 @@ describe('wireApiHeaderStepDefinitions', () => {
     }
 
     afterEach(async () => {
-      await API_AUTWrapper.closeAllRegistered();
+      await API_AUTWrapper.closeAllAUTsAndAPIs();
     });
 
     // ─── pattern [0]: literal JSON, no DataTable ───────────────────────────────────────
@@ -484,7 +484,7 @@ describe('wireApiHeaderStepDefinitions', () => {
     }
 
     async function createStubAut(appName = 'AUT'): Promise<API_AUTWrapper> {
-      return API_AUTWrapper.create({
+      return API_AUTWrapper.startNewApplication({
         appName,
         port: 15990,
         bootstrapper: async () => ({}),
@@ -494,7 +494,7 @@ describe('wireApiHeaderStepDefinitions', () => {
 
     afterEach(async () => {
       API_AUTWrapper.clearNextRequestHeaders();
-      await API_AUTWrapper.closeAllRegistered();
+      await API_AUTWrapper.closeAllAUTsAndAPIs();
     });
 
     describe('literal JSON, no DataTable (when[0])', () => {

@@ -41,7 +41,7 @@ function registerAndCaptureHandlers() {
 }
 
 async function createStubAut(appName = 'AUT'): Promise<API_AUTWrapper> {
-  return API_AUTWrapper.create({
+  return API_AUTWrapper.startNewApplication({
     appName,
     port: 15991,
     bootstrapper: async () => ({}),
@@ -125,7 +125,7 @@ describe('wireApiQueryStringStepDefinitions', () => {
   describe('wired behaviour: session-level', () => {
 
     afterEach(async () => {
-      await API_AUTWrapper.closeAllRegistered();
+      await API_AUTWrapper.closeAllAUTsAndAPIs();
     });
 
     it('literal JSON, no DataTable — mode omitted defaults to setQueryParams (replace)', async () => {
@@ -203,7 +203,7 @@ describe('wireApiQueryStringStepDefinitions', () => {
   describe('wired behaviour: "next request" one-shot equivalents', () => {
 
     afterEach(async () => {
-      await API_AUTWrapper.closeAllRegistered();
+      await API_AUTWrapper.closeAllAUTsAndAPIs();
       API_AUTWrapper.clearNextRequestQueryParams();
     });
 

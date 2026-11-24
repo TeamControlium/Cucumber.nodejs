@@ -12,6 +12,7 @@ export {
   wireApiQueryStringStepDefinitions,
   wireApiRequestStepDefinitions,
   wireApiValidationStepDefinitions,
+  wireApiHeaderValidationStepDefinitions,
 } from './api/index.js';
 export type {
   CucumberGivenWhenThenAPI,
@@ -20,6 +21,7 @@ export type {
   CucumberQueryStringGivenWhenAPI,
   CucumberRequestGivenWhenAPI,
   CucumberThenAPI,
+  CucumberHeaderValidationThenAPI,
 } from './api/index.js';
 
 // `mocking/` and `browser/` have no real step definitions yet — see their own README.md

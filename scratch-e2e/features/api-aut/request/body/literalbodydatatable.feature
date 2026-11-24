@@ -1,4 +1,4 @@
-@full
+@full @api @request @body
 Feature: Scratch example — quoted-literal body requests with DataTable, every structural combination
 
   Exercises:
@@ -9,7 +9,12 @@ Feature: Scratch example — quoted-literal body requests with DataTable, every 
   Test areas also excersize single/double-quotes usage for Method and body, and a spread of
   ValueExpression casts on the DataTable's own Value column (plain string, number:, boolean:).
   Identifying target by name or AUT.
-  Bare body cannot take a DataTable at all, so it is not an area of test here.
+  Bare body cannot take a DataTable at all, so it is not an area of test here. Neither is
+  yaml — same reason as literalbody.feature's own doc comment: the quoted-literal step
+  patterns' kind-word regex only recognises json/xml/text, never yaml, so a literal yaml
+  body (with or without a DataTable override) isn't reachable through this step shape at
+  all today — see filebodydatatable.feature for yaml + DataTable via a file-sourced body
+  instead.
 
   Background: Scratch Target App is running
     Given Application [Scratch Target App] is running

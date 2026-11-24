@@ -3,7 +3,7 @@ import { createServer, STATUS_CODES } from 'node:http';
 /**
  * A genuinely independent, generic HTTP test-utility server — the local, offline-safe
  * equivalent of something like httpbin.org. Deliberately **not** wired into
- * `@controlium/framework`'s `API_AUTWrapper` lifecycle at all — it's never `create()`d/
+ * `@controlium/framework`'s `API_AUTWrapper` lifecycle at all — it's never `startNewApplication()`d/
  * `prepareApplication()`d/`startApplication()`d by anything in this package. It's started
  * once, before `scratch-e2e`'s own Cucumber run even begins (see `run-scratch-e2e.sh`), and
  * stopped when that whole run ends, regardless of pass/fail.
@@ -14,7 +14,7 @@ import { createServer, STATUS_CODES } from 'node:http';
  *   intercept or pass through to, rather than needing a real external dependency.
  * - A stand-in "AUT" the test suite itself never starts or stops — for testing
  *   `request.steps.ts` against something not under `API_AUTWrapper`'s control at all (a
- *   plain `new API_AUTWrapper({ host, port })`, never through `create()`/
+ *   plain `new API_AUTWrapper({ host, port })`, never through `startNewApplication()`/
  *   `prepareApplication()`, works fine for this — `isControlled` just stays `false`).
  *
  * Endpoints:
