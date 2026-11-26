@@ -1,7 +1,7 @@
 import type { After, AfterAll, Before, BeforeAll, BeforeStep, ITestStepHookParameter, IWorld, setDefaultTimeout } from '@cucumber/cucumber';
 import he from 'he';
 
-import { afterSuite, afterTest, beforeSuite, beforeTest, resolveStepTimeoutFromSettings } from '@controlium/framework';
+import { LifecycleHooks, SettingsRegistry } from '@controlium/framework';
 import { Detokeniser, Logger, LogLevels, Settings, Utils } from '@controlium/utils';
 
 export {
@@ -164,7 +164,7 @@ export function wireCucumberHooks(cucumber: CucumberHookAPI): void {
     }
   });
 
-  cucumber.BeforeAll(beforeSuite);
+  cucumber.BeforeAll(LifecycleHooks.beforeSuite);
 
   // Runs before every step, in every feature — see guardStepDataTableExistance's
   // own doc comment for why this check belongs here, as a BeforeStep hook, rather than inside
@@ -192,18 +192,18 @@ export function wireCucumberHooks(cucumber: CucumberHookAPI): void {
     // Detokeniser defaultr delimiter is '|'.  This wont work with Cucumber due to | being used as
     // a column delimiter in a DataTable.  So change to ';'.
     Detokeniser.delimiter = ';';
-    await beforeTest();
+    await LifecycleHooks.beforeTest();
   });
 
   // afterTest() itself now clears Settings' context and Logger's output callback — see
-  // its own doc comment in @controlium/framework. Per [[feedback_test_atomicity_non_negotiable]],
-  // that clearing moved there specifically so no driver (this one, a future jest-driver,
-  // anything else) has to independently remember to do it — a driver's own Before-side
-  // wiring only ever SETS this ambient state (which afterTest() structurally can't do
-  // itself, since it never receives the runner's own World/context), never clears it.
-  cucumber.After({ name: 'Controlium framework: end test' }, afterTest);
+  // its own doc comment in @controlium/framework. That clearing moved there specifically so
+  // no driver (this one, a future jest-driver, anything else) has to independently remember
+  // to do it — a driver's own Before-side wiring only ever SETS this ambient state (which
+  // afterTest() structurally can't do itself, since it never receives the runner's own
+  // World/context), never clears it.
+  cucumber.After({ name: 'Controlium framework: end test' }, LifecycleHooks.afterTest);
 
-  cucumber.AfterAll(afterSuite);
+  cucumber.AfterAll(LifecycleHooks.afterSuite);
 }
 
 /**
@@ -216,15 +216,15 @@ export interface CucumberTimeoutAPI {
 
 /**
  * Resolves a default Cucumber step timeout via `@controlium/framework`'s
- * {@link resolveStepTimeoutFromSettings} (env var, then npm package config, then the given
- * default) and applies it with `cucumber.setDefaultTimeout`. Separate from
- * {@link wireCucumberHooks} — order-independent, and a suite that wants to resolve/set its
- * own timeout is free to skip this entirely.
+ * `SettingsRegistry.resolve('Default Step Timeout', overrides)` (env var, then npm package
+ * config, then the given default) and applies it with `cucumber.setDefaultTimeout`. Separate
+ * from {@link wireCucumberHooks} — order-independent, and a suite that wants to resolve/set
+ * its own timeout is free to skip this entirely.
  *
- * Overrides `resolveStepTimeoutFromSettings`'s own generic defaults with this driver's
- * established env var/npm-config naming (`CUCUMBER_STEP_TIMEOUT`/`testStepTimeout`) — unchanged
- * from before this resolution logic moved into `@controlium/framework`, so existing suites'
- * configuration keeps working exactly as it did.
+ * Overrides the registered setting's own generic defaults with this driver's established env
+ * var/npm-config naming (`CUCUMBER_STEP_TIMEOUT`/`testStepTimeout`) via `SettingsRegistry.resolve`'s
+ * own per-call `overrides` parameter — unchanged from before this resolution logic moved into
+ * `@controlium/framework`, so existing suites' configuration keeps working exactly as it did.
  *
  * @param cucumber - The `@cucumber/cucumber` module itself, same convention as
  *   {@link wireCucumberHooks}.
@@ -262,7 +262,7 @@ export function wireCucumberStepTimeout(
     );
   }
 
-  const timeoutMs = resolveStepTimeoutFromSettings({
+  const timeoutMs = SettingsRegistry.resolve<number>('Default Step Timeout', {
     processEnvName: options?.processEnvName ?? 'CUCUMBER_STEP_TIMEOUT',
     npmPackageConfigName: options?.npmPackageConfigName ?? 'testStepTimeout',
     defaultValue: options?.defaultValue ?? 30000,

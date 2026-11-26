@@ -16,19 +16,18 @@ Feature: Scratch example — test-data-file body requests, every structural comb
   Background: Scratch Target App is running
     Given Application [Scratch Target App] is running
 
-  @debug
   Scenario Outline: bare file body — <methodQuoted> to <target>, file [<filename>]
     Excersize Method quoting using single or double quotes across request target identified
     by name or AUT, with a file-sourced body and no kind word at all (opaque text, the
     default).
     When a <methodQuoted> request to <target> path '/my-body', file [<filename>]
     Examples:
-      | methodQuoted | target               | filename                                       |
-      | 'GET'        | AUT                  | request-body/plain<%random;from(1,2,3,4)%>.txt |
-      | 'GET'        | AUT                  | request-body/plain.txt                         |
-      | "GET"        | [Scratch Target App] | request-body/plain.txt                         |
-      | 'POST'       | AUT                  | request-body/plain.txt                         |
-      | "DELETE"     | [Scratch Target App] | request-body/plain.txt                         |
+      | methodQuoted | target               | filename                                               |
+      | 'GET'        | AUT                  | request-body/plain<%random;from('1','2','3','4')%>.txt |
+      | 'GET'        | AUT                  | request-body/plain.txt                                 |
+      | "GET"        | [Scratch Target App] | request-body/plain.txt                                 |
+      | 'POST'       | AUT                  | request-body/plain.txt                                 |
+      | "DELETE"     | [Scratch Target App] | request-body/plain.txt                                 |
 
   Scenario Outline: explicit "text" file body — <methodQuoted> to <target>
     Excersize the explicit "text" kind word — behaves identically to the bare form above,

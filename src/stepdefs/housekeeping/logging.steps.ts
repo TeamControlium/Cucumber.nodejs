@@ -1,5 +1,5 @@
 import type { When as CucumberWhen } from '@cucumber/cucumber';
-import { resolveLogLevelFromSettings } from '@controlium/framework';
+import { SettingsRegistry } from '@controlium/framework';
 import { Log, Logger, LogLevels } from '@controlium/utils';
 
 /**
@@ -16,7 +16,7 @@ export interface CucumberWhenAPI {
  *
  * `wireCucumberHooks` already resolves the logging level fresh at the start of every
  * scenario (env var → npm config → profile parameter → default, via
- * {@link resolveLogLevelFromSettings}) — these two steps let a scenario override that for
+ * `SettingsRegistry.resolve('Log Level')`) — these two steps let a scenario override that for
  * its own remaining duration (e.g. "turn on debug logging right before the one step I'm
  * actually investigating") and discard the override back to whatever settings resolve to,
  * without needing a whole separate scenario or tag.
@@ -65,7 +65,7 @@ export function wireLoggingStepDefinitions(cucumber: CucumberWhenAPI): void {
 
   /**
    * Discards any mid-scenario override from the step above, re-resolving the level fresh
-   * via {@link resolveLogLevelFromSettings} — the same env var → npm config → profile
+   * via `SettingsRegistry.resolve('Log Level')` — the same env var → npm config → profile
    * parameter → default chain `wireCucumberHooks` already runs at the start of every
    * scenario.
    *
@@ -74,7 +74,7 @@ export function wireLoggingStepDefinitions(cucumber: CucumberWhenAPI): void {
    */
   When(/^Logging level is reset to settings$/, function () {
     Log.writeLine(LogLevels.TestInformation, 'STEP Logging level is reset to settings');
-    Logger.loggingLevel = resolveLogLevelFromSettings();
+    Logger.loggingLevel = SettingsRegistry.resolve<string>('Log Level');
     Log.writeLine(LogLevels.TestInformation, `Logging level set to '${Logger.loggingLevel}'`);
   });
 }

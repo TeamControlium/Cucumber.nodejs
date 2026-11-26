@@ -1,4 +1,4 @@
-import { afterSuite, afterTest, beforeSuite, beforeTest } from '@controlium/framework';
+import { LifecycleHooks } from '@controlium/framework';
 import { Logger, Settings } from '@controlium/utils';
 
 import { wireCucumberHooks, wireCucumberStepTimeout } from './index';
@@ -30,15 +30,15 @@ describe('wireCucumberHooks', () => {
 
     wireCucumberHooks(cucumber);
 
-    expect(cucumber.BeforeAll).toHaveBeenCalledWith(beforeSuite);
-    expect(cucumber.AfterAll).toHaveBeenCalledWith(afterSuite);
+    expect(cucumber.BeforeAll).toHaveBeenCalledWith(LifecycleHooks.beforeSuite);
+    expect(cucumber.AfterAll).toHaveBeenCalledWith(LifecycleHooks.afterSuite);
 
-    // After's handler is afterTest directly (by reference) — afterTest() itself now owns
-    // clearing Settings'/Logger's per-test ambient state (see @controlium/framework's own
-    // lifecycle.spec.ts for that behaviour), so there's nothing left for a wrapper here to
-    // do, unlike Before (which still has to SET that state, needing the World afterTest
-    // structurally can't receive — see its own doc comment).
-    expect(cucumber.After.mock.calls[0][1]).toBe(afterTest);
+    // After's handler is LifecycleHooks.afterTest directly (by reference) — afterTest()
+    // itself now owns clearing Settings'/Logger's per-test ambient state (see
+    // @controlium/framework's own lifecycle.spec.ts for that behaviour), so there's nothing
+    // left for a wrapper here to do, unlike Before (which still has to SET that state,
+    // needing the World afterTest structurally can't receive — see its own doc comment).
+    expect(cucumber.After.mock.calls[0][1]).toBe(LifecycleHooks.afterTest);
 
     // Before IS still a custom closure (beforeTest + Settings/Logger setup) — verify by
     // invoking the registered handler and confirming it runs without throwing, rather than
