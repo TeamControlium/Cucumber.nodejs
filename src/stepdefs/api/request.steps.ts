@@ -1,6 +1,6 @@
 import type { DataTable, Given as CucumberGiven, When as CucumberWhen } from '@cucumber/cucumber';
 import { API_AUTWrapper } from '@controlium/framework';
-import { APIUtils, Log, Logger, LogLevels, StringUtils, Utils, ValueExpression } from '@controlium/utils';
+import { APIUtils, Detokeniser, Log, Logger, LogLevels, StringUtils, Utils, ValueExpression } from '@controlium/utils';
 
 import { resolveDataTableRows } from '../../dataTable/cucumberDataTable.js';
 
@@ -78,13 +78,16 @@ async function resolveLiteralRequestBody(
  * Resolves a test-data-file-sourced request body — the one point where the `bin` kind forks
  * away entirely from {@link resolveLiteralRequestBody}'s text-based path: `bin` loads raw
  * bytes via {@link APIUtils.resolveBinaryFileRequestBody} (no `ValueExpression.parse`, no
- * text decoding, no trimming, no DataTable — raw bytes have no text structure to mutate),
- * while every other kind goes through `ValueExpression.parse`'s plain `file:` source (path
- * resolution, then file content) and on into {@link resolveLiteralRequestBody} exactly as
- * before. `filename` is used exactly as given — no token resolution on it, same as the file's
- * own loaded content once it reaches `resolveLiteralRequestBody`. Shared by both file-sourced
- * step registrations below (with vs. without a trailing DataTable) so this fork lives in
- * exactly one place.
+ * text decoding, no trimming, no DataTable, no token resolution — raw bytes have no text to
+ * resolve tokens against), while every other kind still goes through `ValueExpression.parse`'s
+ * plain `file:` source (path resolution, then file content) and on into
+ * {@link resolveLiteralRequestBody} exactly as before — which is where the *file's own
+ * content* gets detokenised, same as any other body source. `filename` itself is a separate
+ * value the tester may also have written a token into (e.g. picking a fixture by date), so
+ * it's resolved here, before it's used for either kind's own file lookup — the one piece of
+ * this function neither fork shares with the content-resolution path below it. Shared by
+ * both file-sourced step registrations below (with vs. without a trailing DataTable) so this
+ * fork lives in exactly one place.
  *
  * @throws {Error} If a DataTable is attached to a `bin` file — raw bytes have no structure
  *   to mutate, same reasoning as `body` (opaque text) rejecting one.
@@ -94,15 +97,16 @@ async function resolveFileRequestBody(
   filename: string,
   dataTable: DataTable | undefined
 ): Promise<{ body: string | Buffer; contentType: string | undefined }> {
+  const resolvedFilename = await Detokeniser.doAsync(filename);
   if (bodyKind === 'bin') {
     if (!Utils.isUndefined(dataTable)) {
       throw new Error(
         '[cucumber stepdefs] DataTable overrides can only be used with "json", "xml" or "yaml" body — "bin" (raw binary) has no structure to mutate.'
       );
     }
-    return APIUtils.resolveBinaryFileRequestBody(filename);
+    return APIUtils.resolveBinaryFileRequestBody(resolvedFilename);
   }
-  const fileBody = (await ValueExpression.parse(`file:${filename}`)) as string;
+  const fileBody = (await ValueExpression.parse(`file:${resolvedFilename}`)) as string;
   return resolveLiteralRequestBody(bodyKind, fileBody, dataTable);
 }
 
@@ -112,9 +116,8 @@ async function resolveFileRequestBody(
  *
  * Same conventions as `headers.steps.ts` (see its own doc comment for the full reasoning,
  * not repeated here):
- * - No token (`[[...]]`) resolution happens anywhere in this file — every pattern's body
- *   (literal, DocString, or file-sourced) reaches `API_AUTWrapper.request()` exactly as the
- *   test author wrote it, or exactly as loaded from the file.
+ * - No "detokenised" wording fork — detokenisation is unconditional, so there's no per-step
+ *   choice to word a pattern around.
  * - The literal-body pattern uses a trailing `;` to mean "a DataTable follows" — same
  *   convention the legacy framework used throughout its own step definitions (e.g.
  *   `APIAUT.steps.ts`'s header/body steps) — rather than one pattern with a genuinely
@@ -421,7 +424,7 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    *   line two
    *   """
    */
-  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|API|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|text|yaml)\] )?body(?: \((?:'(.*)'|"(.*)") line endings\))?:$/, async function (
+  When(/^a (?:'([^']*)'|"([^"]*)") request to (AUT|API|\[[^[\]]*\]) path (?:'([^'\s]*)'|"([^"\s]*)"), (?:\[(json|xml|yaml|text)\] )?body(?: \((?:'(.*)'|"(.*)") line endings\))?:$/, async function (
     methodSingleQuoted: string | undefined,
     methodDoubleQuoted: string | undefined,
     requestTarget: string,
@@ -453,10 +456,9 @@ export function wireApiRequestStepDefinitions(cucumber: CucumberGivenWhenAPI): v
    * parse/mutate/beautify/Content-Type handling as the quoted-literal and DocString
    * patterns above for `json`/`xml`/`yaml`/`text` ({@link resolveLiteralRequestBody}, via
    * {@link resolveFileRequestBody}), just sourced from a file instead of the step's own
-   * text — loaded via {@link ValueExpression.parse}'s plain `file:` source (path resolved
-   * against the configured test-data root, then the file's content read, same as every other
-   * file-sourced value in this package; no token resolution on either). `bin` forks away from
-   * all of that entirely — see
+   * text — loaded via {@link ValueExpression.parse}'s plain `file:` source (the configured
+   * test-data root, detokenised path then content, same as every other file-sourced value
+   * in this package). `bin` forks away from all of that entirely — see
    * {@link resolveFileRequestBody}'s own doc comment. No DataTable override — see the
    * trailing-`;` sibling registration below for that (see this function's own doc comment
    * for why these are two separate registrations rather than one with an optional

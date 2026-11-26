@@ -1,6 +1,6 @@
 import type { DataTable, Then as CucumberThen } from '@cucumber/cucumber';
 import { API_AUTWrapper } from '@controlium/framework';
-import { JsonUtils, Log, LogLevels, StringUtils, Validate, ValueExpression } from '@controlium/utils';
+import { Detokeniser, JsonUtils, Log, LogLevels, StringUtils, Validate, ValueExpression } from '@controlium/utils';
 
 import { resolveDataTableRows } from '../../dataTable/cucumberDataTable.js';
 
@@ -351,11 +351,14 @@ export function wireApiHeaderValidationStepDefinitions(cucumber: CucumberThenAPI
     validateHeaderSet(expectedHeaders, target.lastResponse.headers, false, `[${target.appName}] response headers`);
   });
 
-  /** Same as above, sourced from a test data file. */
+  /** Same as above, sourced from a test data file — the filename itself is detokenised (via
+   *  {@link Detokeniser.doAsync}) before it's used to locate the file; the file's own content
+   *  is not. */
   Then(/^Response from (AUT|API|\[[^[\]]*\]) has headers from test data file \[(.*)\]$/, async function (requestTarget: string, filename: string) {
     const target = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
     Log.writeLine(LogLevels.TestInformation, `STEP Response from ${requestTarget} has headers from test data file [${filename}]`);
-    const literal = (await ValueExpression.parse(`file:${filename}`)) as string;
+    const resolvedFilename = await Detokeniser.doAsync(filename);
+    const literal = (await ValueExpression.parse(`file:${resolvedFilename}`)) as string;
     const expectedHeaders = parseHeaderSetLiteral(literal, 'has headers from test data file');
     validateHeaderSet(expectedHeaders, target.lastResponse.headers, false, `[${target.appName}] response headers`);
   });
@@ -415,11 +418,14 @@ export function wireApiHeaderValidationStepDefinitions(cucumber: CucumberThenAPI
     validateHeaderSet(expectedHeaders, target.lastResponse.headers, true, `[${target.appName}] response headers`);
   });
 
-  /** Same as above, sourced from a test data file. */
+  /** Same as above, sourced from a test data file — the filename itself is detokenised (via
+   *  {@link Detokeniser.doAsync}) before it's used to locate the file; the file's own content
+   *  is not. */
   Then(/^Response from (AUT|API|\[[^[\]]*\]) contains headers in test data file \[(.*)\]$/, async function (requestTarget: string, filename: string) {
     const target = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
     Log.writeLine(LogLevels.TestInformation, `STEP Response from ${requestTarget} contains headers in test data file [${filename}]`);
-    const literal = (await ValueExpression.parse(`file:${filename}`)) as string;
+    const resolvedFilename = await Detokeniser.doAsync(filename);
+    const literal = (await ValueExpression.parse(`file:${resolvedFilename}`)) as string;
     const expectedHeaders = parseHeaderSetLiteral(literal, 'contains headers in test data file');
     validateHeaderSet(expectedHeaders, target.lastResponse.headers, true, `[${target.appName}] response headers`);
   });
@@ -437,7 +443,8 @@ export function wireApiHeaderValidationStepDefinitions(cucumber: CucumberThenAPI
   Then(/^Response from (AUT|API|\[[^[\]]*\]) contains headers in test data file \[(.*)\];$/, async function (requestTarget: string, filename: string, dataTable: DataTable) {
     const target = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
     Log.writeLine(LogLevels.TestInformation, `STEP Response from ${requestTarget} contains headers in test data file [${filename}] (+ DataTable)`);
-    const literal = (await ValueExpression.parse(`file:${filename}`)) as string;
+    const resolvedFilename = await Detokeniser.doAsync(filename);
+    const literal = (await ValueExpression.parse(`file:${resolvedFilename}`)) as string;
     const fileHeaders = parseHeaderSetLiteral(literal, 'contains headers in test data file');
     const dataTableHeaders = await buildHeaderSetFromDataTable(dataTable);
     const expectedHeaders = JsonUtils.resolveSentinels({ ...fileHeaders, ...dataTableHeaders });

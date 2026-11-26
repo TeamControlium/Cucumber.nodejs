@@ -1,6 +1,6 @@
 import type { DataTable, Then as CucumberThen } from '@cucumber/cucumber';
 import { API_AUTWrapper } from '@controlium/framework';
-import { JsonUtils, Log, LogLevels, Validate, ValueExpression, XmlUtils } from '@controlium/utils';
+import { Detokeniser, JsonUtils, Log, LogLevels, Validate, ValueExpression, XmlUtils } from '@controlium/utils';
 
 import { resolveDataTableRows } from '../../dataTable/cucumberDataTable.js';
 
@@ -250,7 +250,8 @@ export function wireApiValidationStepDefinitions(cucumber: CucumberThenAPI): voi
     const target = API_AUTWrapper.findAUTOrAPIByTargetText(requestTarget);
     Validate.number(expectedStatus, target.lastResponse.status, `[${target.appName}] response status`);
 
-    const expectedBody = (await ValueExpression.parse(`file:${filename}`)) as string;
+    const resolvedFilename = await Detokeniser.doAsync(filename);
+    const expectedBody = (await ValueExpression.parse(`file:${resolvedFilename}`)) as string;
     await compareFullBody(kind, expectedBody, target.lastResponse.body, `[${target.appName}] response body`, compareTypesCapture);
   });
 

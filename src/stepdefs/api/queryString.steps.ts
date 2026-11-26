@@ -1,6 +1,6 @@
 import type { DataTable, Given as CucumberGiven, When as CucumberWhen } from '@cucumber/cucumber';
 import { API_AUTWrapper } from '@controlium/framework';
-import { APIUtils, JsonUtils, Log, LogLevels, Utils, ValueExpression } from '@controlium/utils';
+import { APIUtils, Detokeniser, JsonUtils, Log, LogLevels, Utils, ValueExpression } from '@controlium/utils';
 
 import { resolveDataTableRows } from '../../dataTable/cucumberDataTable.js';
 
@@ -101,12 +101,14 @@ function applyNextRequestQueryParams(
 /**
  * Loads a test-data file's contents as a JSON query-params object, via
  * `ValueExpression.parse('file,json:<filename>', { useJson5: true })` — same mechanism as
- * `headers.steps.ts`'s own `resolveHeadersFromTestDataFile`. Shape-validated via
- * {@link JsonUtils.assertPlainObject}.
+ * `headers.steps.ts`'s own `resolveHeadersFromTestDataFile`, including resolving tokens in
+ * `filename` itself (via {@link Detokeniser.doAsync}) before using it to locate the file.
+ * Shape-validated via {@link JsonUtils.assertPlainObject}.
  */
 async function resolveQueryParamsFromTestDataFile(filename: string): Promise<Record<string, unknown>> {
-  const fileQueryParams = await ValueExpression.parse(`file,json:${filename}`, { useJson5: true });
-  return JsonUtils.assertPlainObject(fileQueryParams, `test data file [${filename}]`);
+  const resolvedFilename = await Detokeniser.doAsync(filename);
+  const fileQueryParams = await ValueExpression.parse(`file,json:${resolvedFilename}`, { useJson5: true });
+  return JsonUtils.assertPlainObject(fileQueryParams, `test data file [${resolvedFilename}]`);
 }
 
 /**

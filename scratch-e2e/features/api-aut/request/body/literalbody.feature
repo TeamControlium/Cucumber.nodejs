@@ -71,7 +71,6 @@ Feature: Scratch example — quoted-literal body requests, every structural comb
       | Framework Information |
       | Framework Debug       |
 
-  @debug
   Scenario Outline: literal <bodyKind> body (<Logging Level>) — <bodyQuoted>
     Excersize every logging level against a representative json/xml literal body, same
     quoting/target axes as the structural outline above, just crossed with logging level
@@ -80,7 +79,7 @@ Feature: Scratch example — quoted-literal body requests, every structural comb
     When a 'POST' request to AUT path '/my-body', [<bodyKind>] body <bodyQuoted>
     Examples:
       | Logging Level         | bodyKind | bodyQuoted                  |
-      | Test Information      | json     | '{"a":[[random;digits;3]]}' |
+      | Test Information      | json     | '{"a":<%random;digits;3%>}' |
       | Test Information      | json     | '{"a":1}'                   |
       | Test Information      | xml      | '<a>1</a>'                  |
       | Test Debug            | json     | '{"a":1}'                   |

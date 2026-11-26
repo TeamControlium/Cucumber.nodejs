@@ -1,6 +1,6 @@
 import type { DataTable, Given as CucumberGiven, When as CucumberWhen } from '@cucumber/cucumber';
 import { API_AUTWrapper } from '@controlium/framework';
-import { APIUtils, JsonUtils, Log, LogLevels, Utils, ValueExpression } from '@controlium/utils';
+import { APIUtils, Detokeniser, JsonUtils, Log, LogLevels, Utils, ValueExpression } from '@controlium/utils';
 
 import { resolveDataTableRows } from '../../dataTable/cucumberDataTable.js';
 
@@ -107,15 +107,18 @@ function applyNextRequestHeaders(
  * Loads a test-data file's contents as a JSON headers object, via
  * `ValueExpression.parse('file,json:<filename>', { useJson5: true })` — reusing the same
  * source×cast grammar a DataTable cell's `Value` column uses, rather than hand-rolling file
- * reading/parsing here. Gets the path resolved via `Utils.resolveTestDataPath`, the file's
- * content read verbatim (no token resolution on either the path or the content), and
- * JSON5-parsed for free — same "test fixture data, not a literal string going anywhere"
- * reasoning as {@link resolveDataTableOverrideHeaders}'s own doc comment. Shape-validated via
- * {@link JsonUtils.assertPlainObject}.
+ * reading/parsing here. `filename` itself is a separate value the tester may have written a
+ * token into (e.g. picking a fixture by date) — resolved via {@link Detokeniser.doAsync} here,
+ * before `Utils.resolveTestDataPath` ever sees it, same as every other file-sourced value in
+ * this package. The file's own content is still read verbatim (no token resolution on the
+ * content itself) and JSON5-parsed for free — same "test fixture data, not a literal string
+ * going anywhere" reasoning as {@link resolveDataTableOverrideHeaders}'s own doc comment.
+ * Shape-validated via {@link JsonUtils.assertPlainObject}.
  */
 async function resolveHeadersFromTestDataFile(filename: string): Promise<Record<string, unknown>> {
-  const fileHeaders = await ValueExpression.parse(`file,json:${filename}`, { useJson5: true });
-  return JsonUtils.assertPlainObject(fileHeaders, `test data file [${filename}]`);
+  const resolvedFilename = await Detokeniser.doAsync(filename);
+  const fileHeaders = await ValueExpression.parse(`file,json:${resolvedFilename}`, { useJson5: true });
+  return JsonUtils.assertPlainObject(fileHeaders, `test data file [${resolvedFilename}]`);
 }
 
 /**
@@ -144,10 +147,13 @@ async function resolveHeadersFromTestDataFile(filename: string): Promise<Record<
  * `replaced` → `setHeaders()`, `merged` → `mergeHeaders()` — so a reader can map the
  * Gherkin wording straight onto the framework call with no translation layer in between.
  *
- * No token (`[[...]]`) resolution happens anywhere in this file — `API_AUTWrapper.request()`
- * and `setHeaders`/`mergeHeaders` take whatever header value reaches them exactly as given,
- * so there is no per-step choice to word a pattern around; a step reading "header data"
- * never has its tokens resolved.
+ * No token (`<%...%>`) resolution happens on header *values* anywhere in this file —
+ * `API_AUTWrapper.request()` and `setHeaders`/`mergeHeaders` take whatever header value
+ * reaches them exactly as given, so there is no per-step choice to word a pattern around; a
+ * step reading "header data" never has its tokens resolved. A test-data-file *path* is
+ * different: {@link resolveHeadersFromTestDataFile} resolves tokens in the filename itself
+ * (via {@link Detokeniser.doAsync}) before using it to locate the file — the path is tester-
+ * authored step text like any other, the file's own content is not.
  *
  * A trailing `;` means "a DataTable follows" — same convention as `request.steps.ts`'s own
  * literal-body patterns (see that file's own doc comment for the full reasoning, not
